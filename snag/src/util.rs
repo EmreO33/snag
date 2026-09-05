@@ -9,6 +9,8 @@ pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Build a Command that never flashes a console window on Windows.
 pub fn command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    // Only Windows mutates it, to set the no-console creation flag.
+    #[allow(unused_mut)]
     let mut c = Command::new(program);
     #[cfg(windows)]
     c.creation_flags(CREATE_NO_WINDOW);
