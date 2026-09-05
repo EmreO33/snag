@@ -1,11 +1,44 @@
+<div align="center">
+
+<img src="assets/logo.jpg" alt="Snag" width="140">
+
 # Snag
 
-A small, fast, native desktop video downloader. Rust + egui, no webview, no
-bundled runtime: one ~5 MB binary that starts instantly.
+**A small, fast, native desktop video downloader.**
+
+Rust + egui, no webview, no bundled runtime: one ~5 MB binary that starts instantly.
+
+[![ci](https://github.com/EmreO33/snag/actions/workflows/ci.yml/badge.svg)](https://github.com/EmreO33/snag/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/EmreO33/snag)](https://github.com/EmreO33/snag/releases/latest)
+
+</div>
 
 Snag is a front end for **yt-dlp**. It builds the yt-dlp command from your
 settings, runs it, and reads the progress back. Merging, remuxing and audio
 conversion are handled by **ffmpeg**, which yt-dlp calls on its own.
+
+> [!IMPORTANT]
+> **Only the Windows build has actually been tested so far.** The Linux and
+> macOS binaries compile in CI and are published on every release, but nobody
+> has run them yet, so treat them as untested.
+>
+> **Found a bug?** Please open one on the
+> [issues page](https://github.com/EmreO33/snag/issues). Include your OS, what
+> you were downloading, and the job log from the queue screen if there is one.
+
+## Download
+
+Grab the latest binary from the
+[releases page](https://github.com/EmreO33/snag/releases/latest):
+
+| platform | file | status |
+| --- | --- | --- |
+| Windows (x86_64) | `snag-windows-x86_64.exe` | tested |
+| Linux (x86_64) | `snag-linux-x86_64` | builds, untested |
+| macOS (Apple silicon) | `snag-macos-aarch64` | builds, untested |
+
+There is no installer: it is a single executable, so put it wherever you like
+and run it.
 
 ## First run
 
@@ -143,6 +176,14 @@ ideas, and any faults in it are Snag's own.
 The downloading is done by [yt-dlp](https://github.com/yt-dlp/yt-dlp) and the
 media work by [ffmpeg](https://ffmpeg.org). Both are separate projects; Snag
 simply drives them.
+
+## Bugs and requests
+
+Open an issue at
+[github.com/EmreO33/snag/issues](https://github.com/EmreO33/snag/issues).
+Windows reports are the most actionable right now, since that is the only
+platform the app has been run on; Linux and macOS reports are welcome too and
+help confirm whether those builds actually work.
 
 ## A note
 
