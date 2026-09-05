@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.jpg" alt="Snag" width="140">
+<img src="assets/logo.png" alt="Snag" width="150">
 
 # Snag
 
