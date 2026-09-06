@@ -49,9 +49,27 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 # --- 1. the executable ------------------------------------------------------
 $exe = if ($ExePath) { $ExePath } else { Join-Path $crate "target\release\snag.exe" }
 if (-not $SkipBuild) {
+    # Rust bakes source paths into panic locations, which means a plain
+    # `cargo build` embeds the builder's cargo registry path (and so their
+    # username) in the binary. Remap them so a shipped build never carries
+    # anything about the machine it was built on.
+    #
+    # CARGO_ENCODED_RUSTFLAGS rather than RUSTFLAGS because these paths contain
+    # spaces, and RUSTFLAGS is split on whitespace.
+    $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
+    $unit = [string][char]0x1f
+    $previous = $env:CARGO_ENCODED_RUSTFLAGS
+    $env:CARGO_ENCODED_RUSTFLAGS = @(
+        "--remap-path-prefix=$cargoHome=[cargo]"
+        "--remap-path-prefix=$root=[snag]"
+    ) -join $unit
+
     Push-Location $crate
     try { cargo build --release; if ($LASTEXITCODE -ne 0) { throw "cargo build failed" } }
-    finally { Pop-Location }
+    finally {
+        Pop-Location
+        $env:CARGO_ENCODED_RUSTFLAGS = $previous
+    }
 }
 if (-not (Test-Path $exe)) { throw "snag.exe not found at $exe" }
 

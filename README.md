@@ -147,6 +147,12 @@ The installer step needs [Inno Setup](https://jrsoftware.org/isinfo.php)
 (`winget install JRSoftware.InnoSetup`); without it the script builds the other
 two and says so.
 
+Build through the script (or CI) rather than a bare `cargo build --release` for
+anything you intend to hand to someone else: it remaps source paths, so the
+binary carries nothing about the machine that built it. A plain release build
+bakes the builder's cargo registry path, and therefore their username, into
+every panic location.
+
 ## Command line
 
 ```bash

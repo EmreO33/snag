@@ -86,7 +86,11 @@ jobs:
 
       - name: build
         working-directory: snag
-        run: cargo build --release --target ${{ matrix.target }}
+        # Remap build paths so the binary carries nothing about the machine it
+        # was built on. The Windows job gets this from the packaging script.
+        run: |
+          export RUSTFLAGS="--remap-path-prefix=$HOME/.cargo=[cargo] --remap-path-prefix=$GITHUB_WORKSPACE=[snag]"
+          cargo build --release --target ${{ matrix.target }}
 
       - name: stage the binary
         run: cp "snag/target/${{ matrix.target }}/release/snag" "${{ matrix.asset }}"

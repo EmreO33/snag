@@ -8,6 +8,11 @@ machine, so you can carry this folder on a USB stick or delete it and be done.
 Delete this file and Snag reverts to the normal behaviour, storing settings in
 %APPDATA%\Snag\config instead.
 
+One thing worth knowing before you share this folder with anyone: the "data"
+folder holds your settings, and those record real paths on your machine, such
+as your download folder. Delete the "data" folder before passing the folder on
+if you would rather not share that.
+
 Snag still needs ffmpeg for merging and conversion. If you want the portable
 copy to be fully self-contained, drop ffmpeg.exe into the "data" folder and
 point at it in settings > advanced.
