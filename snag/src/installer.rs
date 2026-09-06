@@ -159,7 +159,14 @@ fn download_to(dest: &Path, tx: &Sender<InstallEvent>) -> Result<(), String> {
 pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send + 'static) {
     std::thread::spawn(move || {
         let dest = dir.join(local_name());
-        let _ = tx.send(InstallEvent::Log(format!("downloading {}", download_url())));
+        let _ = tx.send(InstallEvent::Log(format!(
+            "source:      {}",
+            download_url()
+        )));
+        let _ = tx.send(InstallEvent::Log(format!(
+            "destination: {}",
+            dest.display()
+        )));
         let _ = tx.send(InstallEvent::State(InstallState::Downloading {
             got: 0,
             total: 0,
@@ -179,7 +186,7 @@ pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send
         match util::run_capture(&dest.display().to_string(), &["--version"]) {
             Ok(version) => {
                 let version = version.trim().to_string();
-                let _ = tx.send(InstallEvent::Log(format!("installed yt-dlp {version}")));
+                let _ = tx.send(InstallEvent::Log(format!("verified:    yt-dlp {version}")));
                 let _ = tx.send(InstallEvent::State(InstallState::Done {
                     path: dest,
                     version,

@@ -304,11 +304,55 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                             }
                         });
 
+                        // When something goes wrong, everything needed to
+                        // understand it should be on screen and copyable. No
+                        // terminal archaeology.
                         if !app.setup.log.is_empty() {
-                            ui.add_space(12.0);
-                            for line in &app.setup.log {
-                                ui.label(egui::RichText::new(line).size(11.0).color(p.faint));
-                            }
+                            ui.add_space(14.0);
+                            let failed = matches!(app.setup.install, InstallState::Failed(_));
+                            theme::section_title(
+                                ui,
+                                &p,
+                                if failed { "what happened" } else { "details" },
+                            );
+                            egui::Frame::none()
+                                .fill(p.well)
+                                .rounding(egui::Rounding::same(8.0))
+                                .inner_margin(egui::Margin::symmetric(12.0, 10.0))
+                                .show(ui, |ui| {
+                                    for line in &app.setup.log {
+                                        ui.label(
+                                            egui::RichText::new(line).size(11.0).color(p.dim),
+                                        );
+                                    }
+                                    if let InstallState::Failed(e) = &app.setup.install {
+                                        ui.add_space(6.0);
+                                        ui.label(
+                                            egui::RichText::new(format!("error:       {e}"))
+                                                .size(11.0)
+                                                .color(p.bad),
+                                        );
+                                    }
+                                    ui.add_space(10.0);
+                                    if theme::pill(ui, &p, "copy these details", false, true)
+                                        .clicked()
+                                    {
+                                        let mut report = app.setup.log.join("
+");
+                                        if let InstallState::Failed(e) = &app.setup.install {
+                                            report.push_str(&format!("
+error:       {e}"));
+                                        }
+                                        report.push_str(&format!(
+                                            "
+snag:        {} on {}",
+                                            crate::selfupdate::current_version(),
+                                            std::env::consts::OS
+                                        ));
+                                        util::set_clipboard_text(&report);
+                                        app.toast("details copied", false);
+                                    }
+                                });
                         }
 
                         ui.add_space(30.0);
