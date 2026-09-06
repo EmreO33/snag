@@ -152,6 +152,16 @@ jobs:
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run             AppDir "Snag-$version-x86_64.AppImage"
           file "Snag-$version-x86_64.AppImage"
 
+      # Building it proves nothing about whether it runs. Execute it here, on
+      # the same old glibc it claims to support, and check it can reach the
+      # network too by resolving a real yt-dlp command.
+      - name: run the AppImage
+        run: |
+          set -eux
+          ldd --version | head -1
+          chmod +x Snag-*.AppImage
+          ./Snag-*.AppImage --appimage-extract-and-run             --print-command "https://example.com/video" | head -3
+
       - uses: actions/upload-artifact@v4
         with:
           name: appimage
