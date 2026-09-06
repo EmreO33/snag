@@ -53,3 +53,14 @@ jobs:
       - name: build
         working-directory: snag
         run: cargo build --release
+
+      # Actually fetch and run yt-dlp on a clean machine. This is the check that
+      # would have caught shipping the python zipapp: it downloaded fine and
+      # then failed to exec, which no amount of compiling would reveal.
+      - name: smoke test the yt-dlp installer
+        if: runner.os == 'Linux'
+        run: |
+          set -eux
+          ./snag/target/release/snag --install-ytdlp "$RUNNER_TEMP/ytdlp"
+          file "$RUNNER_TEMP/ytdlp/yt-dlp"
+          "$RUNNER_TEMP/ytdlp/yt-dlp" --version
