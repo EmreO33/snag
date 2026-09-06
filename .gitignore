@@ -1,3 +1,4 @@
 /snag/target/
 **/*.rs.bk
 *.pdb
+/dist/

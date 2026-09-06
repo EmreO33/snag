@@ -9,6 +9,7 @@ use crate::util;
 
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
+    let logo = app.logo.clone();
     let full_width = ui.available_width();
     let box_width = full_width.min(660.0);
 
@@ -16,7 +17,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
         let top_gap = ((ui.available_height() - 420.0) * 0.32).max(10.0);
         ui.add_space(top_gap);
 
-        theme::logo(ui, &p, 64.0);
+        theme::logo(ui, &p, 64.0, logo.as_ref());
         ui.add_space(10.0);
         ui.label(
             egui::RichText::new("paste a link, pick what you want, done")

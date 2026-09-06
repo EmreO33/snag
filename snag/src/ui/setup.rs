@@ -47,13 +47,14 @@ fn path_row(
 
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
+    let logo = app.logo.clone();
     let ctx = ui.ctx().clone();
     let installing = app.setup.install.busy();
 
     // The header sits outside the scroll region so it never scrolls away.
     ui.vertical_centered(|ui| {
         ui.add_space(6.0);
-        theme::logo(ui, &p, 44.0);
+        theme::logo(ui, &p, 44.0, logo.as_ref());
         ui.add_space(8.0);
         ui.label(
             egui::RichText::new("welcome to snag")
@@ -74,26 +75,48 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
         .auto_shrink([false, false])
         .id_salt("setup_scroll")
         .show(ui, |ui| {
-            // Centred with explicit padding rather than vertical_centered, which
-            // mismeasures the content rect once the cards change height.
+            // Centred with explicit padding rather than vertical_centered, and
+            // sized with set_max_width rather than a fixed allocation: giving
+            // the column a zero height made the scroll area mismeasure its own
+            // content and drift away from the top as the cards changed size.
             let width = ui.available_width().min(680.0);
             let pad = ((ui.available_width() - width) * 0.5).max(0.0);
             ui.horizontal_top(|ui| {
                 ui.add_space(pad);
-                ui.allocate_ui_with_layout(
-                    egui::Vec2::new(width, 0.0),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
+                ui.vertical(|ui| {
+                    ui.set_max_width(width);
+                    {
                         // --- 1. where settings live -----------------------
                         theme::section_title(ui, &p, "1. where snag keeps its settings");
+                        let portable = crate::bootstrap::is_portable();
                         theme::card(ui, &p, |ui| {
-                            let default = crate::bootstrap::platform_config_dir();
-                            path_row(ui, &p, &mut app.setup.config_dir, Some(default), !installing);
+                            if portable {
+                                ui.label(
+                                    egui::RichText::new(
+                                        app.setup.config_dir.display().to_string(),
+                                    )
+                                    .size(13.0)
+                                    .color(p.text),
+                                );
+                            } else {
+                                let default = crate::bootstrap::platform_config_dir();
+                                path_row(
+                                    ui,
+                                    &p,
+                                    &mut app.setup.config_dir,
+                                    Some(default),
+                                    !installing,
+                                );
+                            }
                         });
                         theme::note_text(
                             ui,
                             &p,
-                            "the default is your appdata folder, which is the right answer unless you want snag portable. a yt-dlp that snag installs also lives here, under bin.",
+                            if portable {
+                                "this is a portable copy, so everything stays in a data folder beside the executable and nothing is written anywhere else. a yt-dlp that snag installs lands there too, under bin."
+                            } else {
+                                "the default is your appdata folder, which is the right answer unless you want snag portable. a yt-dlp that snag installs also lives here, under bin."
+                            },
                         );
 
                         // --- 2. downloads ---------------------------------
@@ -289,8 +312,8 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                         }
 
                         ui.add_space(30.0);
-                    },
-                );
+                    }
+                });
             });
         });
 }

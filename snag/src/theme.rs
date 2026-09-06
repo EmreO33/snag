@@ -362,61 +362,21 @@ pub fn card<R>(ui: &mut Ui, p: &Palette, add: impl FnOnce(&mut Ui) -> R) -> R {
         .inner
 }
 
-/// The Snag mark: an arrow dropping into a tray, drawn rather than shipped.
-pub fn logo(ui: &mut Ui, p: &Palette, size: f32) {
+/// The Snag mark, tinted with the current theme's text colour. The artwork is
+/// white, so a multiply tint recolours it exactly.
+pub fn logo(ui: &mut Ui, p: &Palette, size: f32, texture: Option<&egui::TextureHandle>) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
     if !ui.is_rect_visible(rect) {
         return;
     }
-    let painter = ui.painter();
-    let c = rect.center();
-    let s = size * 0.5;
-    let stroke = Stroke::new((size * 0.075).max(1.5), p.text);
-
-    // shaft
-    painter.line_segment(
-        [
-            egui::pos2(c.x, c.y - s * 0.85),
-            egui::pos2(c.x, c.y + s * 0.15),
-        ],
-        stroke,
-    );
-    // arrow head
-    painter.line_segment(
-        [
-            egui::pos2(c.x - s * 0.42, c.y - s * 0.28),
-            egui::pos2(c.x, c.y + s * 0.16),
-        ],
-        stroke,
-    );
-    painter.line_segment(
-        [
-            egui::pos2(c.x + s * 0.42, c.y - s * 0.28),
-            egui::pos2(c.x, c.y + s * 0.16),
-        ],
-        stroke,
-    );
-    // tray
-    painter.line_segment(
-        [
-            egui::pos2(c.x - s * 0.72, c.y + s * 0.42),
-            egui::pos2(c.x - s * 0.72, c.y + s * 0.76),
-        ],
-        stroke,
-    );
-    painter.line_segment(
-        [
-            egui::pos2(c.x + s * 0.72, c.y + s * 0.42),
-            egui::pos2(c.x + s * 0.72, c.y + s * 0.76),
-        ],
-        stroke,
-    );
-    painter.line_segment(
-        [
-            egui::pos2(c.x - s * 0.72, c.y + s * 0.76),
-            egui::pos2(c.x + s * 0.72, c.y + s * 0.76),
-        ],
-        stroke,
+    let Some(texture) = texture else {
+        return;
+    };
+    ui.painter().image(
+        texture.id(),
+        rect,
+        Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+        p.text,
     );
 }
 

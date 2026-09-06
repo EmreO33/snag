@@ -84,7 +84,7 @@ pub fn sidebar(app: &mut SnagApp, ctx: &egui::Context) {
         )
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                crate::theme::logo(ui, &p, 36.0);
+                crate::theme::logo(ui, &p, 36.0, app.logo.as_ref());
                 ui.add_space(2.0);
                 ui.label(
                     egui::RichText::new("snag")

@@ -1,59 +1,62 @@
-//! The window and taskbar icon, rasterized at startup so no image file has to
-//! ship alongside the binary. It draws the same mark the UI uses.
+//! The Snag mark, decoded from PNGs baked into the binary.
+//!
+//! Two variants are embedded. The window and taskbar icon is the logo on the
+//! brand's near-black rounded square, so it stays legible against any taskbar
+//! colour. The in-app mark is the bare white logo, which the UI tints with the
+//! current theme's text colour.
 
-const SIZE: usize = 64;
+/// The launcher icon: the mark on its own background.
+const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
 
-/// Distance from point `p` to the segment `a`-`b`, in pixels.
-fn dist_to_segment(px: f32, py: f32, ax: f32, ay: f32, bx: f32, by: f32) -> f32 {
-    let (dx, dy) = (bx - ax, by - ay);
-    let len_sq = dx * dx + dy * dy;
-    let t = if len_sq <= f32::EPSILON {
-        0.0
-    } else {
-        (((px - ax) * dx + (py - ay) * dy) / len_sq).clamp(0.0, 1.0)
+/// The bare mark, drawn inside the app and tinted at runtime.
+const MARK_PNG: &[u8] = include_bytes!("../../assets/logo-mark.png");
+
+/// Decode a PNG into `(width, height, rgba)`.
+fn decode(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let decoder = png::Decoder::new(bytes);
+    let mut reader = decoder.read_info().ok()?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).ok()?;
+    buf.truncate(info.buffer_size());
+
+    // Everything we ship is 8-bit, but normalise the channel count so a future
+    // re-export without an alpha channel cannot silently break the icon.
+    let rgba = match info.color_type {
+        png::ColorType::Rgba => buf,
+        png::ColorType::Rgb => buf
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[1], p[2], 255])
+            .collect(),
+        png::ColorType::Grayscale => buf.iter().flat_map(|&v| [v, v, v, 255]).collect(),
+        png::ColorType::GrayscaleAlpha => buf
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[0], p[0], p[1]])
+            .collect(),
+        png::ColorType::Indexed => return None,
     };
-    let (cx, cy) = (ax + dx * t, ay + dy * t);
-    ((px - cx).powi(2) + (py - cy).powi(2)).sqrt()
+
+    Some((info.width, info.height, rgba))
 }
 
-pub fn icon_data() -> egui::IconData {
-    let n = SIZE as f32;
-    let c = n * 0.5;
-    let s = n * 0.5;
-    let half_stroke = n * 0.048;
-
-    // The mark as line segments: shaft, arrow head, tray.
-    let strokes: [(f32, f32, f32, f32); 6] = [
-        (c, c - s * 0.80, c, c + s * 0.14),
-        (c - s * 0.40, c - s * 0.26, c, c + s * 0.15),
-        (c + s * 0.40, c - s * 0.26, c, c + s * 0.15),
-        (c - s * 0.68, c + s * 0.40, c - s * 0.68, c + s * 0.72),
-        (c + s * 0.68, c + s * 0.40, c + s * 0.68, c + s * 0.72),
-        (c - s * 0.68, c + s * 0.72, c + s * 0.68, c + s * 0.72),
-    ];
-
-    let mut rgba = vec![0u8; SIZE * SIZE * 4];
-    for y in 0..SIZE {
-        for x in 0..SIZE {
-            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let d = strokes
-                .iter()
-                .map(|(ax, ay, bx, by)| dist_to_segment(px, py, *ax, *ay, *bx, *by))
-                .fold(f32::INFINITY, f32::min);
-
-            // One pixel of feathering keeps the diagonals from looking chewed.
-            let coverage = (1.0 - (d - half_stroke)).clamp(0.0, 1.0);
-            let i = (y * SIZE + x) * 4;
-            rgba[i] = 0xf2;
-            rgba[i + 1] = 0xf2;
-            rgba[i + 2] = 0xf2;
-            rgba[i + 3] = (coverage * 255.0) as u8;
-        }
-    }
-
-    egui::IconData {
+/// The window icon, or None if the embedded PNG will not decode.
+pub fn icon_data() -> Option<egui::IconData> {
+    let (width, height, rgba) = decode(ICON_PNG)?;
+    Some(egui::IconData {
         rgba,
-        width: SIZE as u32,
-        height: SIZE as u32,
-    }
+        width,
+        height,
+    })
+}
+
+/// The bare mark as an egui image, ready to be tinted.
+pub fn mark_image() -> Option<egui::ColorImage> {
+    let (width, height, rgba) = decode(MARK_PNG)?;
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        [width as usize, height as usize],
+        &rgba,
+    ))
 }

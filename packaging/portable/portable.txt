@@ -1,0 +1,13 @@
+This file is what makes Snag portable.
+
+While it sits next to snag.exe, Snag keeps everything it owns in the "data"
+folder beside the executable: your settings, and any yt-dlp it installs for
+you. It writes nothing to AppData, the registry, or anywhere else on the
+machine, so you can carry this folder on a USB stick or delete it and be done.
+
+Delete this file and Snag reverts to the normal behaviour, storing settings in
+%APPDATA%\Snag\config instead.
+
+Snag still needs ffmpeg for merging and conversion. If you want the portable
+copy to be fully self-contained, drop ffmpeg.exe into the "data" folder and
+point at it in settings > advanced.

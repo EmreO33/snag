@@ -7,13 +7,14 @@ use crate::util;
 
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
+    let logo = app.logo.clone();
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(20.0);
-                theme::logo(ui, &p, 56.0);
+                theme::logo(ui, &p, 56.0, logo.as_ref());
                 ui.add_space(8.0);
                 ui.label(egui::RichText::new("snag").size(20.0).color(p.text).strong());
                 ui.label(

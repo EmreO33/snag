@@ -151,6 +151,8 @@ pub struct SnagApp {
     applied_appearance: crate::settings::Appearance,
 
     pub palette: Palette,
+    /// The logo, uploaded once and tinted per theme wherever it is drawn.
+    pub logo: Option<egui::TextureHandle>,
     pub view: View,
     pub settings_tab: SettingsTab,
 
@@ -190,7 +192,13 @@ impl SnagApp {
         let (setup_tx, setup_rx) = channel();
         let needs_setup = !settings.setup_done;
 
+        let logo = crate::icon::mark_image().map(|image| {
+            cc.egui_ctx
+                .load_texture("snag_logo", image, egui::TextureOptions::LINEAR)
+        });
+
         let mut app = Self {
+            logo,
             saved_snapshot: settings.clone(),
             applied_appearance: settings.appearance.clone(),
             palette,
@@ -531,6 +539,11 @@ impl SnagApp {
             match ev {
                 SetupEvent::Detected { ytdlp, ffmpeg } => {
                     self.setup.detecting = false;
+                    // Share the find with the rest of the app, so the status bar
+                    // and updates screen are right the moment setup ends.
+                    if let Some((_, version)) = &ytdlp {
+                        self.ytdlp_version = version.clone();
+                    }
                     self.setup.found_ytdlp = ytdlp;
                     self.setup.found_ffmpeg = ffmpeg;
                 }
@@ -552,9 +565,10 @@ impl SnagApp {
 
     /// Apply the setup choices and move on to the app proper.
     pub fn finish_setup(&mut self, ctx: &egui::Context) {
-        // The config directory has to move first: everything else is saved into it.
+        // The config directory has to move first: everything else is saved into
+        // it. A portable copy has no say in this: it is always beside the exe.
         let chosen = self.setup.config_dir.clone();
-        if chosen != crate::bootstrap::config_dir() {
+        if !crate::bootstrap::is_portable() && chosen != crate::bootstrap::config_dir() {
             if let Err(e) = crate::bootstrap::set_config_dir(&chosen) {
                 self.setup.error = Some(e);
                 return;

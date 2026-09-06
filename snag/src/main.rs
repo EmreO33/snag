@@ -109,7 +109,7 @@ fn main() -> eframe::Result<()> {
             .with_inner_size([980.0, 660.0])
             .with_min_inner_size([720.0, 480.0])
             .with_app_id("snag")
-            .with_icon(icon::icon_data()),
+            .with_icon(icon::icon_data().unwrap_or_default()),
         vsync: true,
         centered: true,
         ..Default::default()

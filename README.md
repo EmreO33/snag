@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="Snag" width="150">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo.png">
+  <img src="assets/logo-on-light.png" alt="Snag" width="150">
+</picture>
 
 # Snag
 
@@ -28,25 +31,36 @@ conversion are handled by **ffmpeg**, which yt-dlp calls on its own.
 
 ## Download
 
-Grab the latest binary from the
-[releases page](https://github.com/EmreO33/snag/releases/latest):
+From the [releases page](https://github.com/EmreO33/snag/releases/latest):
 
-| platform | file | status |
-| --- | --- | --- |
-| Windows (x86_64) | `snag-windows-x86_64.exe` | tested |
-| Linux (x86_64) | `snag-linux-x86_64` | builds, untested |
-| macOS (Apple silicon) | `snag-macos-aarch64` | builds, untested |
+**Windows** &mdash; pick one:
 
-There is no installer: it is a single executable, so put it wherever you like
-and run it.
+| file | what it is |
+| --- | --- |
+| `Snag-<version>-windows-setup.exe` | **Installer.** Installs for you or for all users, adds a Start Menu entry, and uninstalls cleanly. |
+| `Snag-<version>-windows-portable.zip` | **Portable.** Unzip and run. Keeps everything in a `data` folder beside the executable and writes nothing else to the machine. |
+| `snag-windows-x86_64.exe` | The bare executable, if you would rather manage it yourself. |
+
+**Linux and macOS** &mdash; `snag-linux-x86_64` and `snag-macos-aarch64`, bare
+binaries. These build in CI but nobody has run them yet.
+
+### Portable mode
+
+Portable is a behaviour, not a separate build: any copy of Snag turns portable
+when a file named `portable.txt` sits next to the executable (the portable zip
+ships one), or when it is started with `--portable`. In that mode the settings
+file and any Snag-installed yt-dlp live in `<folder>/data` instead of
+`%APPDATA%\Snag\config`, and nothing outside the folder is touched. Delete the
+marker file and it reverts to the normal behaviour.
 
 ## First run
 
 Snag asks three things once, then never again:
 
 1. **where settings live** &mdash; defaults to `%APPDATA%\Snag\config`, or pick any
-   folder (a portable install next to the binary, say). The choice is recorded in
-   a one-line pointer file at the default location, so Snag can find it next time.
+   folder. The choice is recorded in a one-line pointer file at the default
+   location, so Snag can find it next time. A portable copy skips this question:
+   its settings always sit beside the executable.
 2. **where downloads go** &mdash; defaults to your Downloads folder.
 3. **yt-dlp** &mdash; Snag looks for it on `PATH`. If it is not there, one click
    downloads the current release from the yt-dlp project's own GitHub releases
@@ -122,6 +136,17 @@ cargo build --release
 The binary lands at `snag/target/release/snag.exe`. Debug builds keep a console
 window; release builds do not.
 
+To build the Windows release artifacts (bare exe, portable zip and installer)
+into `dist/`:
+
+```powershell
+.\packaging\build-windows.ps1
+```
+
+The installer step needs [Inno Setup](https://jrsoftware.org/isinfo.php)
+(`winget install JRSoftware.InnoSetup`); without it the script builds the other
+two and says so.
+
 ## Command line
 
 ```bash
@@ -151,6 +176,11 @@ src/
   installer.rs   fetches yt-dlp from its GitHub releases
   icon.rs        the window icon, rasterized at startup
   ui/            one module per screen
+
+packaging/
+  build-windows.ps1     builds the exe, portable zip and installer into dist/
+  windows/snag.iss      the Inno Setup installer script
+  portable/             the files that ship inside the portable zip
 ```
 
 Progress is read through a custom `--progress-template`, so parsing does not
@@ -160,8 +190,9 @@ thread with a killable child process, and nothing blocks the render loop.
 ## Builds
 
 CI runs `cargo fmt --check`, `cargo clippy -D warnings` and a release build on
-Windows, Linux and macOS for every push. Pushing a `v*` tag builds binaries for
-all three and publishes them to a GitHub release.
+Windows, Linux and macOS for every push. Pushing a `v*` tag builds every
+artifact (including the Windows installer and portable zip) and publishes them
+to a GitHub release.
 
 ## Credit
 
