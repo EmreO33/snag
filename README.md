@@ -100,17 +100,28 @@ inside Snag.
 
 **save** &mdash; paste a link, pick a mode, download.
 
+Snag checks the link as you paste it and shows what it is: title, channel,
+duration, and the qualities the site actually offers, so you can override the
+quality for one download without touching your settings.
+
 | mode | what you get |
 | --- | --- |
 | `auto` | video + audio, merged into one file |
 | `audio` | audio track only, converted to your chosen format |
 | `mute` | video only, audio track dropped |
 
-Paste several links at once (one per line) and they all queue up.
+Paste several links at once (one per line) and they all queue up. Paste a
+**playlist** and Snag says how many items it holds and asks whether you want
+just the one you linked or all of them &mdash; rather than silently taking one.
 
 **queue** &mdash; live progress, speed, ETA and size per job, with cancel, retry,
 open, show-in-folder, copy-link and a per-job log. Runs several downloads at
 once, up to the limit you set.
+
+**history** &mdash; every finished download, remembered across restarts. Open the
+file, show it in its folder, download it again, or copy the link back out. Says
+plainly when a file has been moved or deleted rather than offering a button
+that would fail.
 
 **remux** &mdash; work on a file you already have, without re-downloading:
 
@@ -198,6 +209,7 @@ snag --print-command <link>          # print the yt-dlp invocation and exit
 snag --print-command <link> --mode=audio
 snag --install-ytdlp                 # install yt-dlp headlessly and exit
 snag --install-ytdlp /some/dir       # ...into a specific folder
+snag <link>                          # open with the link already in the box
 ```
 
 `--print-command` prints one argument per line using the current settings, which
@@ -216,6 +228,8 @@ src/
   remux.rs       ffmpeg operations
   updater.rs     version check and self-update
   bootstrap.rs   resolves where the config lives
+  probe.rs       asks yt-dlp what a link is, before downloading it
+  history.rs     what has been downloaded, across restarts
   selfupdate.rs  updating Snag itself
   installer.rs   fetches yt-dlp from its GitHub releases
   icon.rs        the window icon, rasterized at startup
@@ -230,6 +244,11 @@ packaging/
 bucket/
   snag.json             the Scoop manifest, which makes this repo a bucket
 ```
+
+When a download fails, Snag translates yt-dlp's message into something
+actionable where it recognises it &mdash; age-gated, private, geo-blocked, rate
+limited, and so on each come with the remedy &mdash; and keeps the original
+underneath.
 
 Progress is read through a custom `--progress-template`, so parsing does not
 depend on yt-dlp's human-readable output format. Every job runs on its own

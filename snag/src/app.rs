@@ -7,8 +7,10 @@ use std::time::Instant;
 
 use eframe::egui;
 
+use crate::history::{Entry as HistoryEntry, History};
 use crate::installer::{InstallEvent, InstallState};
-use crate::jobs::{Job, JobEvent, JobState};
+use crate::jobs::{Job, JobEvent, JobOverrides, JobState};
+use crate::probe::{ProbeResult, ProbeState};
 use crate::remux::{RemuxEvent, RemuxOp, RemuxState};
 use crate::selfupdate::{self, InstallKind, SelfUpdateEvent, SelfUpdateState};
 use crate::settings::{Mode, Settings};
@@ -20,6 +22,7 @@ use crate::updater::{self, UpdateEvent, UpdateState};
 pub enum View {
     Setup,
     Home,
+    History,
     Queue,
     Remux,
     Settings,
@@ -162,6 +165,16 @@ pub struct SnagApp {
 
     pub url_input: String,
     pub mode: Mode,
+    /// What the link in the box turned out to be, and the choices made about it.
+    pub probe: ProbeState,
+    probed_url: String,
+    url_changed_at: Option<Instant>,
+    probe_tx: Sender<ProbeResult>,
+    probe_rx: Receiver<ProbeResult>,
+    pub whole_playlist: bool,
+    pub height_override: Option<u32>,
+
+    pub history: History,
 
     pub jobs: Vec<Job>,
     job_tx: Sender<JobEvent>,
@@ -201,6 +214,7 @@ impl SnagApp {
         let (upd_tx, upd_rx) = channel();
         let (setup_tx, setup_rx) = channel();
         let (app_tx, app_rx) = channel();
+        let (probe_tx, probe_rx) = channel();
         let needs_setup = !settings.setup_done;
 
         let logo = crate::icon::mark_image().map(|image| {
@@ -217,6 +231,14 @@ impl SnagApp {
             settings_tab: SettingsTab::Video,
             url_input: String::new(),
             mode: Mode::Auto,
+            probe: ProbeState::Idle,
+            probed_url: String::new(),
+            url_changed_at: None,
+            probe_tx,
+            probe_rx,
+            whole_playlist: false,
+            height_override: None,
+            history: History::load(),
             jobs: Vec::new(),
             job_tx,
             job_rx,
@@ -277,6 +299,59 @@ impl SnagApp {
         self.jobs.iter().filter(|j| j.state.is_active()).count()
     }
 
+    /// Probe the link in the box once typing settles, so the preview keeps up
+    /// without firing a yt-dlp process on every keystroke.
+    fn pump_probe(&mut self, ctx: &egui::Context) {
+        while let Ok(result) = self.probe_rx.try_recv() {
+            // A reply for a link that is no longer in the box is stale.
+            if result.url == self.probed_url {
+                self.probe = result.state;
+            }
+        }
+
+        let url = self.url_input.trim().to_string();
+        if url != self.probed_url && self.url_changed_at.is_none() {
+            self.url_changed_at = Some(Instant::now());
+        }
+
+        let Some(changed) = self.url_changed_at else {
+            return;
+        };
+        if changed.elapsed().as_millis() < 500 {
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
+            return;
+        }
+        self.url_changed_at = None;
+
+        if url == self.probed_url {
+            return;
+        }
+        self.probed_url = url.clone();
+        self.whole_playlist = false;
+        self.height_override = None;
+
+        // Only one link at a time is worth previewing; a pasted batch is not.
+        let single = url.lines().count() == 1 && crate::util::looks_like_url(&url);
+        if !single {
+            self.probe = ProbeState::Idle;
+            return;
+        }
+        crate::probe::spawn(
+            url,
+            self.settings.clone(),
+            self.probe_tx.clone(),
+            Self::repainter(ctx),
+        );
+    }
+
+    /// The probe result for the link currently in the box, if there is one.
+    pub fn current_probe(&self) -> Option<&crate::probe::Probe> {
+        match &self.probe {
+            ProbeState::Done(p) if p.url == self.url_input.trim() => Some(p),
+            _ => None,
+        }
+    }
+
     /// Queue a download for the current URL box, one job per non-empty line.
     pub fn enqueue_current(&mut self) {
         let raw = self.url_input.trim().to_string();
@@ -297,12 +372,20 @@ impl SnagApp {
                 self.toast(format!("not a link: {url}"), true);
                 continue;
             }
-            self.jobs.push(Job::new(url, self.mode));
+            let overrides = JobOverrides {
+                whole_playlist: self.whole_playlist,
+                height: self.height_override,
+            };
+            self.jobs.push(Job::new(url, self.mode, overrides));
             queued += 1;
         }
 
         if queued > 0 {
             self.url_input.clear();
+            self.probe = ProbeState::Idle;
+            self.probed_url.clear();
+            self.whole_playlist = false;
+            self.height_override = None;
             self.toast(
                 if queued == 1 {
                     "queued 1 download".to_string()
@@ -330,6 +413,7 @@ impl SnagApp {
                     job.id,
                     job.url.clone(),
                     job.mode,
+                    job.overrides,
                     self.settings.clone(),
                     job.child.clone(),
                     job.cancel_flag.clone(),
@@ -379,6 +463,7 @@ impl SnagApp {
                     if let Some(name) = finished_ok {
                         let short: String = name.chars().take(48).collect();
                         self.toast(format!("saved {short}"), false);
+                        self.record_in_history(id);
                     }
                 }
                 JobEvent::Log(id, line) => {
@@ -395,6 +480,25 @@ impl SnagApp {
                     }
                 }
             }
+        }
+    }
+
+    /// Remember a finished download so it can be found again later.
+    fn record_in_history(&mut self, id: u64) {
+        let Some(job) = self.jobs.iter().find(|j| j.id == id) else {
+            return;
+        };
+        let entry = HistoryEntry {
+            url: job.url.clone(),
+            title: job.display_name(),
+            mode: job.mode,
+            file: job.file.clone(),
+            bytes: job.total.max(job.downloaded),
+            finished_unix: crate::updater::now_unix(),
+        };
+        self.history.record(entry);
+        if let Err(e) = self.history.save() {
+            self.toast(format!("could not save history: {e}"), true);
         }
     }
 
@@ -820,6 +924,7 @@ impl eframe::App for SnagApp {
         self.drain_app_update_events();
         self.drain_setup_events();
         self.pump_queue(ctx);
+        self.pump_probe(ctx);
         self.handle_dropped_files(ctx);
         self.autosave();
 
@@ -843,6 +948,7 @@ impl eframe::App for SnagApp {
             .show(ctx, |ui| match self.view {
                 View::Setup => ui::setup::view(self, ui),
                 View::Home => ui::home::view(self, ui),
+                View::History => ui::history_view::view(self, ui),
                 View::Queue => ui::queue::view(self, ui),
                 View::Remux => ui::remux_view::view(self, ui),
                 View::Settings => ui::settings_view::view(self, ui),

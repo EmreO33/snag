@@ -2,9 +2,11 @@
 
 mod app;
 mod bootstrap;
+mod history;
 mod icon;
 mod installer;
 mod jobs;
+mod probe;
 mod remux;
 mod selfupdate;
 mod settings;
@@ -32,7 +34,7 @@ fn print_command_and_exit() -> bool {
         _ => settings::Mode::Auto,
     };
     println!("{}", settings.ytdlp_bin());
-    for arg in ytdlp::build_args(url, mode, &settings) {
+    for arg in ytdlp::build_args(url, mode, jobs::JobOverrides::default(), &settings) {
         println!("{arg}");
     }
     true
@@ -84,6 +86,13 @@ fn install_ytdlp_and_exit() -> bool {
     true
 }
 
+/// A link passed on the command line, so `snag <url>` fills the box ready to
+/// go. This is also what a future "open with Snag" or notification click would
+/// use.
+fn startup_url() -> Option<String> {
+    std::env::args().skip(1).find(|a| util::looks_like_url(a))
+}
+
 /// `snag --view=<name>` opens straight to a screen instead of the link box.
 fn startup_view() -> Option<app::View> {
     std::env::args()
@@ -92,6 +101,7 @@ fn startup_view() -> Option<app::View> {
             "home" | "save" => Some(app::View::Home),
             "queue" => Some(app::View::Queue),
             "remux" => Some(app::View::Remux),
+            "history" => Some(app::View::History),
             "settings" => Some(app::View::Settings),
             "updates" => Some(app::View::Updates),
             "about" => Some(app::View::About),
@@ -125,6 +135,9 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(move |cc| {
             let mut app = app::SnagApp::new(cc);
+            if let Some(url) = startup_url() {
+                app.url_input = url;
+            }
             if let Some(v) = startup_view() {
                 app.view = v;
             }

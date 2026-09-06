@@ -76,6 +76,8 @@ pub struct Job {
     pub id: u64,
     pub url: String,
     pub mode: Mode,
+    /// Overrides for this download only, leaving the global settings alone.
+    pub overrides: JobOverrides,
     pub title: String,
     pub state: JobState,
     pub downloaded: f64,
@@ -90,12 +92,22 @@ pub struct Job {
     pub cancel_flag: Arc<AtomicBool>,
 }
 
+/// Choices that apply to one download rather than to every download.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct JobOverrides {
+    /// Take the whole playlist rather than just the linked item.
+    pub whole_playlist: bool,
+    /// Cap this download at a specific height, whatever the settings say.
+    pub height: Option<u32>,
+}
+
 impl Job {
-    pub fn new(url: String, mode: Mode) -> Self {
+    pub fn new(url: String, mode: Mode, overrides: JobOverrides) -> Self {
         Self {
             id: next_id(),
             url,
             mode,
+            overrides,
             title: String::new(),
             state: JobState::Queued,
             downloaded: 0.0,
@@ -143,6 +155,7 @@ pub fn spawn(
     id: u64,
     url: String,
     mode: Mode,
+    overrides: JobOverrides,
     settings: Settings,
     child_slot: Arc<Mutex<Option<Child>>>,
     cancel_flag: Arc<AtomicBool>,
@@ -154,7 +167,7 @@ pub fn spawn(
         repaint();
 
         let bin = settings.ytdlp_bin();
-        let args = ytdlp::build_args(&url, mode, &settings);
+        let args = ytdlp::build_args(&url, mode, overrides, &settings);
 
         let spawned = util::command(&bin)
             .args(&args)
@@ -286,7 +299,7 @@ pub fn spawn(
                 .cloned()
                 .or_else(|| stderr_tail.last().cloned())
                 .unwrap_or_else(|| "yt-dlp exited with an error".to_string());
-            JobState::Failed(reason)
+            JobState::Failed(ytdlp::explain_error(&reason))
         };
 
         let _ = tx.send(JobEvent::State(id, final_state));

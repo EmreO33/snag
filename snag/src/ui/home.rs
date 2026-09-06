@@ -102,6 +102,9 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                         .color(p.faint),
                 );
 
+                // --- what the link turned out to be ------------------------
+                preview(app, ui, &p);
+
                 if submit {
                     app.enqueue_current();
                 }
@@ -169,5 +172,109 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                 }
             },
         );
+    });
+}
+
+/// The card under the link box: what this link is, and the choices that only
+/// make sense once we know.
+fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
+    match &app.probe {
+        crate::probe::ProbeState::Working => {
+            ui.add_space(12.0);
+            ui.label(
+                egui::RichText::new("checking the link...")
+                    .size(12.0)
+                    .color(p.dim),
+            );
+        }
+        crate::probe::ProbeState::Failed(e) => {
+            ui.add_space(12.0);
+            // Only the first line: the rest is yt-dlp's own wording, which
+            // belongs in the job log rather than under the link box.
+            let first: String = e
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .chars()
+                .take(140)
+                .collect();
+            ui.label(egui::RichText::new(first).size(12.0).color(p.bad));
+        }
+        _ => {}
+    }
+
+    let Some(probe) = app.current_probe().cloned() else {
+        return;
+    };
+
+    ui.add_space(12.0);
+    theme::card(ui, p, |ui| {
+        let title = if probe.title.is_empty() {
+            "untitled".to_string()
+        } else {
+            probe.title.clone()
+        };
+        let short: String = title.chars().take(64).collect();
+        ui.label(egui::RichText::new(short).size(14.0).color(p.text));
+
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let mut facts: Vec<String> = Vec::new();
+            if let Some(u) = &probe.uploader {
+                facts.push(u.chars().take(28).collect());
+            }
+            if let Some(d) = probe.duration_label() {
+                facts.push(d);
+            }
+            if probe.live {
+                facts.push("live".to_string());
+            }
+            if let Some(n) = probe.playlist_items.filter(|n| *n > 1) {
+                facts.push(format!("playlist, {n} items"));
+            }
+            ui.label(
+                egui::RichText::new(facts.join("  ·  "))
+                    .size(12.0)
+                    .color(p.dim),
+            );
+        });
+
+        // A playlist link would otherwise quietly download one item, which is
+        // rarely what someone pasting a playlist wants.
+        if probe.is_playlist() {
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("take").size(12.0).color(p.dim));
+                let mut whole = app.whole_playlist;
+                if theme::pill(ui, p, "just this one", !whole, true).clicked() {
+                    whole = false;
+                }
+                let count = probe.playlist_items.unwrap_or(0);
+                if theme::pill(ui, p, &format!("all {count}"), whole, true).clicked() {
+                    whole = true;
+                }
+                app.whole_playlist = whole;
+            });
+        }
+
+        // Only offer qualities the site actually has.
+        if !probe.heights.is_empty() && app.mode != Mode::Audio {
+            ui.add_space(10.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.label(egui::RichText::new("quality").size(12.0).color(p.dim));
+                let mut chosen = app.height_override;
+                if theme::pill(ui, p, "from settings", chosen.is_none(), true).clicked() {
+                    chosen = None;
+                }
+                for h in probe.heights.iter().take(6) {
+                    let label = format!("{h}p");
+                    if theme::pill(ui, p, &label, chosen == Some(*h), true).clicked() {
+                        chosen = Some(*h);
+                    }
+                }
+                app.height_override = chosen;
+            });
+        }
     });
 }

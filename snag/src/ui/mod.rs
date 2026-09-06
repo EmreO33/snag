@@ -1,4 +1,5 @@
 pub mod about;
+pub mod history_view;
 pub mod home;
 pub mod queue;
 pub mod remux_view;
@@ -114,6 +115,9 @@ pub fn sidebar(app: &mut SnagApp, ctx: &egui::Context) {
             }
             if nav_item(ui, &p, "remux", None, app.view == View::Remux).clicked() {
                 app.view = View::Remux;
+            }
+            if nav_item(ui, &p, "history", None, app.view == View::History).clicked() {
+                app.view = View::History;
             }
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {

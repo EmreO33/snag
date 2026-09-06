@@ -1,6 +1,7 @@
 //! Everything that translates Snag's settings into a yt-dlp invocation, plus
 //! the parser for the machine-readable progress lines it prints back.
 
+use crate::jobs::JobOverrides;
 use crate::settings::{AudioFormat, Container, Mode, Settings};
 
 /// Field separator for our custom progress template. Chosen because it is
@@ -120,9 +121,9 @@ pub fn split_args(raw: &str) -> Vec<String> {
 }
 
 /// Build the `-f` format selector for a mode.
-fn format_selector(mode: Mode, s: &Settings) -> String {
+fn format_selector(mode: Mode, overrides: JobOverrides, s: &Settings) -> String {
     let mut filters = String::new();
-    if let Some(h) = s.video.quality.height() {
+    if let Some(h) = overrides.height.or_else(|| s.video.quality.height()) {
         filters.push_str(&format!("[height<={h}]"));
     }
     if s.video.max_fps > 0 {
@@ -141,7 +142,7 @@ fn format_selector(mode: Mode, s: &Settings) -> String {
 }
 
 /// Build the `-S` format sort, which is what actually steers codec preference.
-fn format_sort(mode: Mode, s: &Settings) -> Option<String> {
+fn format_sort(mode: Mode, overrides: JobOverrides, s: &Settings) -> Option<String> {
     let mut tokens: Vec<String> = Vec::new();
 
     match mode {
@@ -152,7 +153,7 @@ fn format_sort(mode: Mode, s: &Settings) -> Option<String> {
             }
         }
         Mode::Auto | Mode::Mute => {
-            if let Some(h) = s.video.quality.height() {
+            if let Some(h) = overrides.height.or_else(|| s.video.quality.height()) {
                 tokens.push(format!("res:{h}"));
             }
             tokens.push(s.video.codec.sort_token().to_string());
@@ -173,7 +174,7 @@ fn format_sort(mode: Mode, s: &Settings) -> Option<String> {
 }
 
 /// Full argument vector for downloading `url` in `mode`.
-pub fn build_args(url: &str, mode: Mode, s: &Settings) -> Vec<String> {
+pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) -> Vec<String> {
     let mut a: Vec<String> = Vec::new();
     let push = |a: &mut Vec<String>, v: &str| a.push(v.to_string());
 
@@ -204,16 +205,17 @@ pub fn build_args(url: &str, mode: Mode, s: &Settings) -> Vec<String> {
     } else {
         push(&mut a, "--no-overwrites");
     }
-    if s.advanced.ignore_playlists {
-        push(&mut a, "--no-playlist");
-    } else {
+    // An explicit choice for this download beats the global preference.
+    if overrides.whole_playlist || !s.advanced.ignore_playlists {
         push(&mut a, "--yes-playlist");
+    } else {
+        push(&mut a, "--no-playlist");
     }
 
     // --- format selection ---------------------------------------------------
     push(&mut a, "-f");
-    a.push(format_selector(mode, s));
-    if let Some(sort) = format_sort(mode, s) {
+    a.push(format_selector(mode, overrides, s));
+    if let Some(sort) = format_sort(mode, overrides, s) {
         push(&mut a, "-S");
         a.push(sort);
     }
@@ -336,7 +338,7 @@ pub fn build_args(url: &str, mode: Mode, s: &Settings) -> Vec<String> {
 
 /// A readable one-line preview of the command, for the settings screen.
 pub fn preview_command(url: &str, mode: Mode, s: &Settings) -> String {
-    let args = build_args(url, mode, s);
+    let args = build_args(url, mode, JobOverrides::default(), s);
     let quoted: Vec<String> = args
         .iter()
         .map(|a| {
@@ -349,4 +351,96 @@ pub fn preview_command(url: &str, mode: Mode, s: &Settings) -> String {
         })
         .collect();
     format!("{} {}", s.ytdlp_bin(), quoted.join(" "))
+}
+
+/// Turn a raw yt-dlp failure into something a person can act on.
+///
+/// yt-dlp's errors are written for someone reading a terminal, and the useful
+/// part is usually buried behind a stack of prefixes. Each case below has a
+/// remedy the user can actually carry out, so say that instead.
+pub fn explain_error(raw: &str) -> String {
+    let lower = raw.to_lowercase();
+
+    let hint = if lower.contains("sign in to confirm your age")
+        || lower.contains("age-restricted")
+        || lower.contains("inappropriate for some users")
+    {
+        Some("this video is age restricted. borrow cookies from a signed-in browser in settings > network.")
+    } else if lower.contains("private video")
+        || lower.contains("members-only")
+        || lower.contains("join this channel")
+    {
+        Some("this video is private or members-only. borrow cookies from a signed-in browser in settings > network.")
+    } else if lower.contains("video unavailable") || lower.contains("removed by the uploader") {
+        Some("the site says this video is gone.")
+    } else if lower.contains("not available in your country")
+        || lower.contains("geo restricted")
+        || lower.contains("geo-restricted")
+    {
+        Some("this video is blocked in your region. a proxy set in settings > network may get around it.")
+    } else if lower.contains("sign in to confirm you're not a bot")
+        || lower.contains("confirm you are not a bot")
+    {
+        Some("the site wants to check you are not a bot. borrow cookies from a signed-in browser in settings > network.")
+    } else if lower.contains("http error 429") || lower.contains("too many requests") {
+        Some("the site is rate limiting you. wait a while, or set a speed limit in settings > network.")
+    } else if lower.contains("unsupported url")
+        || lower.contains("unable to extract") && lower.contains("extractor")
+    {
+        Some("yt-dlp does not recognise this link. check the updates screen: a newer yt-dlp often fixes this.")
+    } else if lower.contains("ffmpeg")
+        && (lower.contains("not found") || lower.contains("not installed"))
+    {
+        Some("this needs ffmpeg, which was not found. install it from the setup screen or settings > advanced.")
+    } else if lower.contains("no space left") {
+        Some("the disk is full.")
+    } else if lower.contains("name or service not known")
+        || lower.contains("temporary failure in name resolution")
+        || lower.contains("failed to resolve")
+    {
+        Some("could not reach the site. check your connection.")
+    } else {
+        None
+    };
+
+    // Strip yt-dlp's prefixes so the underlying message reads cleanly.
+    let cleaned = raw
+        .trim()
+        .trim_start_matches("ERROR:")
+        .trim()
+        .trim_start_matches("[youtube]")
+        .trim();
+
+    match hint {
+        Some(h) => format!("{h}\n\n{cleaned}"),
+        None => cleaned.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::explain_error;
+
+    #[test]
+    fn age_restriction_gets_an_actionable_hint() {
+        let out = explain_error("ERROR: [youtube] abc: Sign in to confirm your age");
+        assert!(
+            out.starts_with("this video is age restricted"),
+            "got: {out}"
+        );
+        // The original is kept underneath rather than thrown away.
+        assert!(out.contains("Sign in to confirm your age"));
+    }
+
+    #[test]
+    fn rate_limiting_is_recognised() {
+        assert!(explain_error("ERROR: HTTP Error 429: Too Many Requests")
+            .starts_with("the site is rate limiting you"));
+    }
+
+    #[test]
+    fn an_unknown_error_is_passed_through_cleanly() {
+        let out = explain_error("ERROR: something nobody predicted");
+        assert_eq!(out, "something nobody predicted");
+    }
 }
