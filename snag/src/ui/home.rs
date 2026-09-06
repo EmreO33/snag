@@ -210,36 +210,65 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
         return;
     };
 
+    let thumbnail = app.thumbnail.clone();
+
     ui.add_space(12.0);
     theme::card(ui, p, |ui| {
-        let title = if probe.title.is_empty() {
-            "untitled".to_string()
-        } else {
-            probe.title.clone()
-        };
-        let short: String = title.chars().take(64).collect();
-        ui.label(egui::RichText::new(short).size(14.0).color(p.text));
-
-        ui.add_space(4.0);
         ui.horizontal(|ui| {
-            let mut facts: Vec<String> = Vec::new();
-            if let Some(u) = &probe.uploader {
-                facts.push(u.chars().take(28).collect());
+            // The preview image, when the site had one and it arrived.
+            if let Some((_, texture)) = &thumbnail {
+                let height = 68.0;
+                let aspect = {
+                    let [w, h] = texture.size();
+                    if h > 0 {
+                        w as f32 / h as f32
+                    } else {
+                        16.0 / 9.0
+                    }
+                };
+                let size = egui::Vec2::new(height * aspect, height);
+                let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+                if ui.is_rect_visible(rect) {
+                    ui.painter().image(
+                        texture.id(),
+                        rect,
+                        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                        egui::Color32::WHITE,
+                    );
+                }
+                ui.add_space(10.0);
             }
-            if let Some(d) = probe.duration_label() {
-                facts.push(d);
-            }
-            if probe.live {
-                facts.push("live".to_string());
-            }
-            if let Some(n) = probe.playlist_items.filter(|n| *n > 1) {
-                facts.push(format!("playlist, {n} items"));
-            }
-            ui.label(
-                egui::RichText::new(facts.join("  ·  "))
-                    .size(12.0)
-                    .color(p.dim),
-            );
+
+            ui.vertical(|ui| {
+                let title = if probe.title.is_empty() {
+                    "untitled".to_string()
+                } else {
+                    probe.title.clone()
+                };
+                let short: String = title.chars().take(58).collect();
+                ui.label(egui::RichText::new(short).size(14.0).color(p.text));
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let mut facts: Vec<String> = Vec::new();
+                    if let Some(u) = &probe.uploader {
+                        facts.push(u.chars().take(28).collect());
+                    }
+                    if let Some(d) = probe.duration_label() {
+                        facts.push(d);
+                    }
+                    if probe.live {
+                        facts.push("live".to_string());
+                    }
+                    if let Some(n) = probe.playlist_items.filter(|n| *n > 1) {
+                        facts.push(format!("playlist, {n} items"));
+                    }
+                    ui.label(
+                        egui::RichText::new(facts.join("  ·  "))
+                            .size(12.0)
+                            .color(p.dim),
+                    );
+                });
+            });
         });
 
         // A playlist link would otherwise quietly download one item, which is

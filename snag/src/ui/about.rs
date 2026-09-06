@@ -38,7 +38,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                 for line in [
                     "snag does not download anything itself. it builds a yt-dlp command from your settings, runs it, and reads the progress back.",
                     "merging, remuxing and audio conversion are handled by ffmpeg, which yt-dlp calls on its own.",
-                    "nothing is uploaded anywhere. the only network call snag makes by itself is the yt-dlp version check against github.",
+                    "nothing is uploaded anywhere. snag reaches the network on its own for three things only: checking github for newer versions of itself and of yt-dlp, downloading them if you ask, and fetching the preview image for a link you have pasted.",
                 ] {
                     ui.label(egui::RichText::new(line).size(13.0).color(p.dim));
                     ui.add_space(6.0);

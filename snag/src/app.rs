@@ -178,6 +178,11 @@ pub struct SnagApp {
     probe_rx: Receiver<ProbeResult>,
     pub whole_playlist: bool,
     pub height_override: Option<u32>,
+    /// The preview image for the link in the box, keyed by the url it came
+    /// from so a late arrival for an older link is ignored.
+    pub thumbnail: Option<(String, egui::TextureHandle)>,
+    thumb_tx: Sender<(String, egui::ColorImage)>,
+    thumb_rx: Receiver<(String, egui::ColorImage)>,
 
     pub history: History,
 
@@ -238,6 +243,7 @@ impl SnagApp {
         let (app_tx, app_rx) = channel();
         let (probe_tx, probe_rx) = channel();
         let (clip_tx, clip_rx) = channel();
+        let (thumb_tx, thumb_rx) = channel();
         let needs_setup = !settings.setup_done;
 
         let logo = crate::icon::mark_image().map(|image| {
@@ -262,6 +268,9 @@ impl SnagApp {
             probe_rx,
             whole_playlist: false,
             height_override: None,
+            thumbnail: None,
+            thumb_tx,
+            thumb_rx,
             history: History::load(),
             hidden: false,
 
@@ -339,8 +348,33 @@ impl SnagApp {
     fn pump_probe(&mut self, ctx: &egui::Context) {
         while let Ok(result) = self.probe_rx.try_recv() {
             // A reply for a link that is no longer in the box is stale.
-            if result.url == self.probed_url {
-                self.probe = result.state;
+            if result.url != self.probed_url {
+                continue;
+            }
+            if let ProbeState::Done(probe) = &result.state {
+                if let Some(url) = probe.thumbnail.clone() {
+                    let already = self.thumbnail.as_ref().is_some_and(|(u, _)| *u == url);
+                    if !already {
+                        let (tx, repaint) = (self.thumb_tx.clone(), Self::repainter(ctx));
+                        std::thread::spawn(move || {
+                            if let Some(image) = crate::probe::fetch_thumbnail(&url) {
+                                let _ = tx.send((url, image));
+                                repaint();
+                            }
+                        });
+                    }
+                }
+            }
+            self.probe = result.state;
+        }
+
+        while let Ok((url, image)) = self.thumb_rx.try_recv() {
+            // Only keep it if it is still the link being looked at.
+            let wanted = matches!(&self.probe, ProbeState::Done(p) if p.thumbnail.as_deref() == Some(url.as_str()));
+            if wanted {
+                let texture =
+                    ctx.load_texture("snag_thumbnail", image, egui::TextureOptions::LINEAR);
+                self.thumbnail = Some((url, texture));
             }
         }
 
@@ -364,6 +398,7 @@ impl SnagApp {
         self.probed_url = url.clone();
         self.whole_playlist = false;
         self.height_override = None;
+        self.thumbnail = None;
 
         // Only one link at a time is worth previewing; a pasted batch is not.
         let single = url.lines().count() == 1 && crate::util::looks_like_url(&url);

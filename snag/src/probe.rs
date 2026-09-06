@@ -4,6 +4,7 @@
 //! is a playlist, and which qualities exist. That turns the link box from
 //! "paste and hope" into something that can show you what you are about to get.
 
+use std::io::Read;
 use std::sync::mpsc::Sender;
 
 use crate::settings::Settings;
@@ -21,6 +22,8 @@ pub struct Probe {
     /// Distinct video heights the site offers, tallest first.
     pub heights: Vec<u32>,
     pub live: bool,
+    /// Where the preview image lives, if the site offers one.
+    pub thumbnail: Option<String>,
 }
 
 impl Probe {
@@ -102,6 +105,21 @@ fn parse(url: &str, json: &serde_json::Value) -> Probe {
             .get("is_live")
             .and_then(|l| l.as_bool())
             .unwrap_or(false),
+        thumbnail: json
+            .get("thumbnail")
+            .and_then(|t| t.as_str())
+            .filter(|t| t.starts_with("http"))
+            .map(str::to_string)
+            .or_else(|| {
+                // Playlists carry a list rather than a single one; the last is
+                // usually the largest.
+                json.get("thumbnails")?
+                    .as_array()?
+                    .iter()
+                    .filter_map(|t| t.get("url")?.as_str())
+                    .rfind(|u| u.starts_with("http"))
+                    .map(str::to_string)
+            }),
     }
 }
 
@@ -153,6 +171,36 @@ pub fn spawn(
         let _ = tx.send(ProbeResult { url, state });
         repaint();
     });
+}
+
+/// How wide a fetched thumbnail is kept. The card shows it far smaller than
+/// the source image, and there is no sense holding a 1280px texture for it.
+const THUMBNAIL_WIDTH: u32 = 320;
+
+/// Fetch and decode a thumbnail. Returns None for anything that does not
+/// arrive as a usable image, which is not worth troubling the user about.
+pub fn fetch_thumbnail(url: &str) -> Option<egui::ColorImage> {
+    let resp = ureq::get(url)
+        .set("User-Agent", "Snag")
+        .timeout(std::time::Duration::from_secs(15))
+        .call()
+        .ok()?;
+
+    let mut bytes = Vec::new();
+    // Cap it: a preview image has no business being larger than this, and an
+    // unbounded read from a remote server is not something to invite.
+    std::io::Read::take(resp.into_reader(), 8 * 1024 * 1024)
+        .read_to_end(&mut bytes)
+        .ok()?;
+
+    let decoded = image::load_from_memory(&bytes).ok()?;
+    let scaled = decoded.thumbnail(THUMBNAIL_WIDTH, THUMBNAIL_WIDTH);
+    let rgba = scaled.to_rgba8();
+    let size = [rgba.width() as usize, rgba.height() as usize];
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        size,
+        rgba.as_raw(),
+    ))
 }
 
 #[cfg(test)]

@@ -24,8 +24,8 @@ conversion are handled by **ffmpeg**, which yt-dlp calls on its own.
 
 ![Snag checking a link before downloading it](assets/screenshots/save.png)
 
-*Paste a link and Snag tells you what it is, including the qualities the site
-actually offers.*
+*Paste a link and Snag tells you what it is: thumbnail, title, channel,
+duration, and the qualities the site actually offers.*
 
 </div>
 
@@ -128,9 +128,9 @@ inside Snag.
 
 **save** &mdash; paste a link, pick a mode, download.
 
-Snag checks the link as you paste it and shows what it is: title, channel,
-duration, and the qualities the site actually offers, so you can override the
-quality for one download without touching your settings.
+Snag checks the link as you paste it and shows what it is: thumbnail, title,
+channel, duration, and the qualities the site actually offers, so you can
+override the quality for one download without touching your settings.
 
 | mode | what you get |
 | --- | --- |

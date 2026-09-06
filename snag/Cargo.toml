@@ -1,6 +1,6 @@
 [package]
 name = "snag"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "Snag - a fast, native video downloader built on yt-dlp"
 authors = ["Snag"]
@@ -16,6 +16,10 @@ directories = "5"
 arboard = "3"
 ureq = { version = "2", features = ["json", "tls"] }
 png = "0.17"
+
+# Thumbnails come back as jpeg or webp. The crate is already in the tree via
+# eframe and arboard, so this only adds the two decoders.
+image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }
 
 # Desktop notifications, used to offer a copied link without stealing focus.
 notify-rust = "4"
