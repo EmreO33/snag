@@ -22,6 +22,8 @@ pub struct Palette {
     pub accent: Color32,
     pub on_accent: Color32,
     pub good: Color32,
+    /// Not broken, but it wants attention before it will work.
+    pub warn: Color32,
     pub bad: Color32,
 }
 
@@ -69,6 +71,7 @@ pub fn palette(theme: ThemeMode, accent: Accent) -> Palette {
             accent: a,
             on_accent,
             good: Color32::from_rgb(0x5c, 0xd2, 0x9a),
+            warn: Color32::from_rgb(0xe8, 0xb3, 0x4a),
             bad: Color32::from_rgb(0xff, 0x6b, 0x6b),
         },
         ThemeMode::Dim => Palette {
@@ -83,6 +86,7 @@ pub fn palette(theme: ThemeMode, accent: Accent) -> Palette {
             accent: a,
             on_accent,
             good: Color32::from_rgb(0x5c, 0xd2, 0x9a),
+            warn: Color32::from_rgb(0xe0, 0xae, 0x52),
             bad: Color32::from_rgb(0xff, 0x7b, 0x7b),
         },
         ThemeMode::Light => Palette {
@@ -97,6 +101,7 @@ pub fn palette(theme: ThemeMode, accent: Accent) -> Palette {
             accent: a,
             on_accent,
             good: Color32::from_rgb(0x1e, 0x8f, 0x5f),
+            warn: Color32::from_rgb(0x9a, 0x6b, 0x0a),
             bad: Color32::from_rgb(0xc4, 0x3a, 0x3a),
         },
     }

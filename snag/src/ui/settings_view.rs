@@ -7,6 +7,7 @@ use crate::settings::{
 };
 use crate::theme;
 use crate::util;
+use crate::youtube::SignInState;
 use crate::ytdlp;
 
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
@@ -41,6 +42,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                 SettingsTab::Processing => changed |= processing(app, ui),
                 SettingsTab::Background => changed |= background(app, ui),
                 SettingsTab::Network => changed |= network(app, ui),
+                SettingsTab::Youtube => changed |= youtube(app, ui),
                 SettingsTab::Advanced => changed |= advanced(app, ui),
             }
             if changed {
@@ -582,29 +584,8 @@ fn network(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
     });
     theme::note_text(ui, &p, "leave the text fields empty to use the defaults.");
 
-    theme::section_title(ui, &p, "cookies");
-    changed |= theme::pill_group(
-        ui,
-        &p,
-        &mut app.settings.network.cookies_from_browser,
-        CookieBrowser::ALL,
-        |b| b.label(),
-    );
-    theme::note_text(
-        ui,
-        &p,
-        "borrows cookies from a browser profile so age-gated and members-only links work. the browser should be closed while snag reads them.",
-    );
-
+    theme::section_title(ui, &p, "identity");
     theme::card(ui, &p, |ui| {
-        changed |= super::field_row(
-            ui,
-            &p,
-            "cookie file",
-            &mut app.settings.network.cookie_file,
-            "path to cookies.txt",
-        );
-        ui.add_space(6.0);
         changed |= super::field_row(
             ui,
             &p,
@@ -616,8 +597,155 @@ fn network(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
     theme::note_text(
         ui,
         &p,
-        "a cookie file takes priority over a browser profile.",
+        "signing in lives on its own screen now: settings > youtube.",
     );
+
+    changed
+}
+
+/// Signing in to YouTube.
+///
+/// This is deliberately its own screen rather than a line in the network tab:
+/// it is the one setting people come looking for by name, and it is worth the
+/// room to say plainly what it does, what it does not do, and why there is no
+/// password box.
+fn youtube(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
+    let p = app.palette;
+    let mut changed = false;
+
+    theme::section_title(ui, &p, "sign in to youtube");
+    theme::note_text(
+        ui,
+        &p,
+        "for age restricted, private and members-only videos. this screen is youtube only: nothing here changes how any other site is downloaded.",
+    );
+
+    theme::card(ui, &p, |ui| {
+        ui.label(
+            egui::RichText::new("snag never asks for your password")
+                .size(13.0)
+                .color(p.text),
+        );
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new(
+                "sign in to youtube in your browser as you normally would, then pick that browser below. snag borrows the session from it, so your password is never typed into snag and never stored by it.",
+            )
+            .size(12.0)
+            .color(p.dim),
+        );
+    });
+
+    theme::section_title(ui, &p, "browser to borrow the session from");
+    let before = app.settings.network.cookies_from_browser;
+    changed |= theme::pill_group(
+        ui,
+        &p,
+        &mut app.settings.network.cookies_from_browser,
+        CookieBrowser::ALL,
+        |b| b.label(),
+    );
+    // A status from the previous browser would be a lie about this one.
+    if app.settings.network.cookies_from_browser != before {
+        app.signin = SignInState::Unknown;
+    }
+    theme::note_text(
+        ui,
+        &p,
+        "close the browser first: it holds a lock on its own cookie store while it is running.",
+    );
+
+    if crate::youtube::sealed_on_windows(app.settings.network.cookies_from_browser) {
+        theme::card(ui, &p, |ui| {
+            ui.label(
+                egui::RichText::new(
+                    "windows: chromium browsers now encrypt their cookies so that only the browser itself can read them, and no external tool can undo that. firefox is the one that reliably works here. the alternative is a cookie file, below.",
+                )
+                .size(12.0)
+                .color(p.warn),
+            );
+        });
+    }
+
+    ui.add_space(10.0);
+    ui.horizontal(|ui| {
+        let ready = crate::youtube::configured(&app.settings) && !app.signin.busy();
+        if theme::action_button(ui, &p, "check sign-in", true, ready).clicked() {
+            app.check_signin(ui.ctx());
+        }
+        ui.add_space(10.0);
+        let (text, color) = match &app.signin {
+            SignInState::Unknown => ("not checked yet".to_string(), p.dim),
+            SignInState::Checking => ("asking youtube...".to_string(), p.dim),
+            SignInState::SignedIn => ("signed in".to_string(), p.good),
+            SignInState::SignedOut => (
+                "cookies read, but not signed in to youtube".to_string(),
+                p.warn,
+            ),
+            SignInState::Unreadable(_) => ("could not read the cookies".to_string(), p.bad),
+            SignInState::Error(_) => ("the check failed".to_string(), p.bad),
+        };
+        ui.label(egui::RichText::new(text).size(12.0).color(color));
+    });
+
+    // The advice differs per outcome, and the raw message is worth keeping
+    // for anything that has to be searched for.
+    match &app.signin {
+        SignInState::SignedOut => theme::note_text(
+            ui,
+            &p,
+            "the browser profile was read, but there is no youtube session in it. sign in to youtube in that browser, close it, and check again.",
+        ),
+        SignInState::Unreadable(raw) | SignInState::Error(raw) => {
+            theme::note_text(ui, &p, "close the browser and try again. if it keeps failing, use a cookie file instead.");
+            theme::card(ui, &p, |ui| {
+                ui.label(
+                    egui::RichText::new(raw.chars().take(400).collect::<String>())
+                        .size(11.0)
+                        .color(p.faint),
+                );
+            });
+        }
+        SignInState::SignedIn => theme::note_text(
+            ui,
+            &p,
+            "restricted videos you have access to will download from now on.",
+        ),
+        _ => {}
+    }
+
+    theme::section_title(ui, &p, "cookie file");
+    theme::card(ui, &p, |ui| {
+        changed |= super::field_row(
+            ui,
+            &p,
+            "cookie file",
+            &mut app.settings.network.cookie_file,
+            "path to cookies.txt",
+        );
+    });
+    theme::note_text(
+        ui,
+        &p,
+        "an exported cookies.txt, for when snag cannot read the browser directly. it takes priority over the browser above. treat the file like a password: anyone who has it is signed in as you.",
+    );
+
+    theme::section_title(ui, &p, "scope");
+    changed |= theme::toggle_row(
+        ui,
+        &p,
+        "only use the sign-in for youtube links",
+        "on by default. turned off, the same cookies are offered to every site you download from, which is rarely what you want.",
+        &mut app.settings.network.cookies_youtube_only,
+    );
+
+    if !app.settings.network.cookies_youtube_only {
+        theme::note_text(
+            ui,
+            &p,
+            "your youtube session is now sent to every site snag downloads from.",
+        );
+    }
 
     changed
 }

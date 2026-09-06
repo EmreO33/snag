@@ -17,6 +17,7 @@ mod ui;
 mod updater;
 mod util;
 mod window;
+mod youtube;
 mod ytdlp;
 
 use eframe::egui;

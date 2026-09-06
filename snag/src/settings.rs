@@ -380,6 +380,10 @@ pub struct NetworkSettings {
     pub socket_timeout: u32,
     pub cookies_from_browser: CookieBrowser,
     pub cookie_file: String,
+    /// Only hand the cookies to YouTube links. On by default: signing in is a
+    /// YouTube feature here, and a session should not be offered to sites
+    /// that were never part of the bargain.
+    pub cookies_youtube_only: bool,
     pub user_agent: String,
 }
 
@@ -392,6 +396,7 @@ impl Default for NetworkSettings {
             socket_timeout: 20,
             cookies_from_browser: CookieBrowser::None,
             cookie_file: String::new(),
+            cookies_youtube_only: true,
             user_agent: String::new(),
         }
     }

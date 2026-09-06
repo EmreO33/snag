@@ -153,10 +153,10 @@ pub fn spawn(
             args.push("--proxy".to_string());
             args.push(settings.network.proxy.trim().to_string());
         }
-        if settings.network.cookies_from_browser != crate::settings::CookieBrowser::None {
-            args.push("--cookies-from-browser".to_string());
-            args.push(settings.network.cookies_from_browser.label().to_string());
-        }
+        // The preview has to be signed in for exactly the links the download
+        // would need it for, or a members-only video would fail to preview and
+        // then download perfectly well.
+        args.extend(crate::youtube::cookie_args(&settings, &url));
         args.push(url.clone());
 
         let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();

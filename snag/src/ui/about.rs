@@ -39,6 +39,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                     "snag does not download anything itself. it builds a yt-dlp command from your settings, runs it, and reads the progress back.",
                     "merging, remuxing and audio conversion are handled by ffmpeg, which yt-dlp calls on its own.",
                     "nothing is uploaded anywhere. snag reaches the network on its own for three things only: checking github for newer versions of itself and of yt-dlp, downloading them if you ask, and fetching the preview image for a link you have pasted.",
+                    "signing in to youtube borrows the session from a browser you are already signed in to. snag has no login form, never sees your password, and never stores the cookies: yt-dlp reads them from the browser and sends them to youtube, and nowhere else.",
                 ] {
                     ui.label(egui::RichText::new(line).size(13.0).color(p.dim));
                     ui.add_space(6.0);

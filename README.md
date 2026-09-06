@@ -152,6 +152,25 @@ copy a link anywhere and Snag offers it, rather than downloading it behind your
 back. Nothing but the clipboard's text is read, none of it is stored, and none
 of it leaves the machine.
 
+**youtube sign-in** &mdash; for age restricted, private and members-only videos.
+
+Snag has no login form and never asks for your password: handing an account
+password to a downloader is something YouTube treats as suspicious, and Snag has
+no business holding one. Sign in to YouTube in your browser as you normally
+would, pick that browser in **settings &rarr; youtube**, and Snag borrows the
+session from it. There is a **check sign-in** button that says plainly whether it
+worked, which browser it read, and what went wrong if it did not.
+
+The session is scoped to YouTube links by default, so it is never offered to
+other sites you download from. That scope can be turned off if you need cookies
+elsewhere.
+
+On Windows, the Chromium browsers (Chrome, Edge, Brave, Opera, Vivaldi) now
+encrypt their cookie store so that only the browser itself can read it, and no
+external tool can undo that. **Firefox is the one that reliably works.** The
+alternative anywhere is an exported `cookies.txt`, which Snag takes in
+preference to a browser profile.
+
 **history** &mdash; every finished download, remembered across restarts. Open the
 file, show it in its folder, download it again, or copy the link back out. Says
 plainly when a file has been moved or deleted rather than offering a button
@@ -192,8 +211,10 @@ the release's published `SHA256SUMS.txt` and thrown away on a mismatch.
 - **local processing** &mdash; download folder, output template with presets, restrict
   file names, overwrite policy, keep source after remux, downloads at once,
   fragments per download
-- **network** &mdash; proxy, speed limit, retries, socket timeout, cookies from a
-  browser profile or a cookies.txt, custom user agent
+- **network** &mdash; proxy, speed limit, retries, socket timeout, custom user agent
+- **youtube** &mdash; sign in by borrowing a browser session, check that it worked,
+  point at a cookies.txt instead, and choose whether the session is scoped to
+  YouTube links
 - **advanced** &mdash; yt-dlp and ffmpeg paths, ignore playlists, verbose log,
   extra yt-dlp arguments, and a live preview of the exact command Snag runs
 

@@ -18,6 +18,7 @@ use crate::theme::{self, Palette};
 use crate::tray::{Tray, TrayCommand};
 use crate::ui;
 use crate::updater::{self, UpdateEvent, UpdateState};
+use crate::youtube::SignInState;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -40,6 +41,7 @@ pub enum SettingsTab {
     Processing,
     Background,
     Network,
+    Youtube,
     Advanced,
 }
 
@@ -52,6 +54,7 @@ impl SettingsTab {
         SettingsTab::Processing,
         SettingsTab::Background,
         SettingsTab::Network,
+        SettingsTab::Youtube,
         SettingsTab::Advanced,
     ];
     pub fn label(&self) -> &'static str {
@@ -63,6 +66,7 @@ impl SettingsTab {
             SettingsTab::Processing => "local processing",
             SettingsTab::Background => "background",
             SettingsTab::Network => "network",
+            SettingsTab::Youtube => "youtube",
             SettingsTab::Advanced => "advanced",
         }
     }
@@ -221,6 +225,12 @@ pub struct SnagApp {
     upd_tx: Sender<UpdateEvent>,
     upd_rx: Receiver<UpdateEvent>,
 
+    /// What the last youtube sign-in check found, and the channel it
+    /// arrives on.
+    pub signin: SignInState,
+    signin_tx: Sender<SignInState>,
+    signin_rx: Receiver<SignInState>,
+
     pub app_update_state: SelfUpdateState,
     pub install_kind: InstallKind,
     pub app_update_log: Vec<String>,
@@ -244,6 +254,7 @@ impl SnagApp {
         let (probe_tx, probe_rx) = channel();
         let (clip_tx, clip_rx) = channel();
         let (thumb_tx, thumb_rx) = channel();
+        let (signin_tx, signin_rx) = channel();
         let needs_setup = !settings.setup_done;
 
         let logo = crate::icon::mark_image().map(|image| {
@@ -290,6 +301,9 @@ impl SnagApp {
             setup: SetupState::new(&settings),
             setup_tx,
             setup_rx,
+            signin: SignInState::Unknown,
+            signin_tx,
+            signin_rx,
             app_update_state: SelfUpdateState::Unknown,
             install_kind: selfupdate::detect_install_kind(),
             app_update_log: Vec::new(),
@@ -601,6 +615,39 @@ impl SnagApp {
                     self.remux.state = st;
                 }
             }
+        }
+    }
+
+    /// Ask youtube whether the configured cookies are a signed-in session.
+    pub fn check_signin(&mut self, ctx: &egui::Context) {
+        if self.signin.busy() {
+            return;
+        }
+        crate::youtube::check(
+            self.settings.ytdlp_bin(),
+            self.settings.clone(),
+            self.signin_tx.clone(),
+            Self::repainter(ctx),
+        );
+    }
+
+    fn drain_signin_events(&mut self) {
+        while let Ok(state) = self.signin_rx.try_recv() {
+            match &state {
+                SignInState::SignedIn => self.toast("signed in to youtube", false),
+                SignInState::SignedOut => {
+                    self.toast("those cookies are not signed in to youtube", true)
+                }
+                SignInState::Unreadable(_) => {
+                    self.toast("could not read that browser's cookies", true)
+                }
+                SignInState::Error(e) => {
+                    let short: String = e.chars().take(90).collect();
+                    self.toast(short, true);
+                }
+                _ => {}
+            }
+            self.signin = state;
         }
     }
 
@@ -1118,6 +1165,7 @@ impl eframe::App for SnagApp {
         self.drain_remux_events();
         self.drain_update_events();
         self.drain_app_update_events();
+        self.drain_signin_events();
         self.drain_setup_events();
         self.pump_queue(ctx);
         self.pump_probe(ctx);

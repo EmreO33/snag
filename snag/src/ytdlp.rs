@@ -304,14 +304,7 @@ pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) 
     a.push(n.retries.to_string());
     push(&mut a, "--socket-timeout");
     a.push(n.socket_timeout.to_string());
-    if n.cookies_from_browser != crate::settings::CookieBrowser::None {
-        push(&mut a, "--cookies-from-browser");
-        a.push(n.cookies_from_browser.label().to_string());
-    }
-    if !n.cookie_file.trim().is_empty() {
-        push(&mut a, "--cookies");
-        a.push(n.cookie_file.trim().to_string());
-    }
+    a.extend(crate::youtube::cookie_args(s, url));
     if !n.user_agent.trim().is_empty() {
         push(&mut a, "--user-agent");
         a.push(n.user_agent.trim().to_string());
@@ -365,12 +358,14 @@ pub fn explain_error(raw: &str) -> String {
         || lower.contains("age-restricted")
         || lower.contains("inappropriate for some users")
     {
-        Some("this video is age restricted. borrow cookies from a signed-in browser in settings > network.")
+        Some(
+            "this video is age restricted. sign in to youtube from settings > youtube to reach it.",
+        )
     } else if lower.contains("private video")
         || lower.contains("members-only")
         || lower.contains("join this channel")
     {
-        Some("this video is private or members-only. borrow cookies from a signed-in browser in settings > network.")
+        Some("this video is private or members-only. sign in to youtube from settings > youtube, with an account that has access.")
     } else if lower.contains("video unavailable") || lower.contains("removed by the uploader") {
         Some("the site says this video is gone.")
     } else if lower.contains("not available in your country")
@@ -381,7 +376,7 @@ pub fn explain_error(raw: &str) -> String {
     } else if lower.contains("sign in to confirm you're not a bot")
         || lower.contains("confirm you are not a bot")
     {
-        Some("the site wants to check you are not a bot. borrow cookies from a signed-in browser in settings > network.")
+        Some("the site wants to check you are not a bot. signing in from settings > youtube is what gets past this.")
     } else if lower.contains("http error 429") || lower.contains("too many requests") {
         Some("the site is rate limiting you. wait a while, or set a speed limit in settings > network.")
     } else if lower.contains("unsupported url")
