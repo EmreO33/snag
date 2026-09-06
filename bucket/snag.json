@@ -1,0 +1,41 @@
+{
+    "version": "0.2.0",
+    "description": "A small, fast, native desktop video downloader built on yt-dlp.",
+    "homepage": "https://github.com/EmreO33/snag",
+    "license": "Proprietary",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/EmreO33/snag/releases/download/v0.2.0/Snag-0.2.0-windows-portable.zip",
+            "hash": "6adf4a1b2fc4e256a1031383c4d81839f01b7cc331d82b53bcd99dec24600b88"
+        }
+    },
+    "bin": "snag.exe",
+    "shortcuts": [
+        [
+            "snag.exe",
+            "Snag"
+        ]
+    ],
+    "persist": "data",
+    "notes": [
+        "Snag does not ship yt-dlp. On first launch it offers to download the current release from the yt-dlp project's own GitHub releases.",
+        "ffmpeg is required for merging and conversion and is not installed by Snag: 'scoop install ffmpeg' will do it.",
+        "Your settings live in the persisted 'data' folder, so they survive updates and uninstalls."
+    ],
+    "suggest": {
+        "ffmpeg": "ffmpeg"
+    },
+    "checkver": {
+        "github": "https://github.com/EmreO33/snag"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/EmreO33/snag/releases/download/v$version/Snag-$version-windows-portable.zip"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/SHA256SUMS.txt"
+        }
+    }
+}

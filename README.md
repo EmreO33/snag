@@ -42,7 +42,25 @@ From the [releases page](https://github.com/EmreO33/snag/releases/latest):
 | `snag-windows-x86_64.exe` | The bare executable, if you would rather manage it yourself. |
 
 **Linux and macOS** &mdash; `snag-linux-x86_64` and `snag-macos-aarch64`, bare
-binaries. These build in CI but nobody has run them yet.
+binaries. These build in CI but nobody has run them yet. The Linux build needs
+glibc 2.39 or newer (Ubuntu 24.04, Fedora 40, Debian 13) plus `libgtk-3-0`,
+which it uses only for the file picker.
+
+Every release also publishes `SHA256SUMS.txt` if you want to check a download.
+
+### Scoop
+
+Snag is its own [Scoop](https://scoop.sh) bucket, so it installs and updates
+with two commands and no admin rights:
+
+```powershell
+scoop bucket add snag https://github.com/EmreO33/snag
+scoop install snag
+```
+
+This uses the portable build, and your settings live in Scoop's persisted
+folder, so `scoop update snag` keeps them. ffmpeg is suggested but not
+installed for you: `scoop install ffmpeg` covers it.
 
 ### Portable mode
 
@@ -187,6 +205,9 @@ packaging/
   build-windows.ps1     builds the exe, portable zip and installer into dist/
   windows/snag.iss      the Inno Setup installer script
   portable/             the files that ship inside the portable zip
+
+bucket/
+  snag.json             the Scoop manifest, which makes this repo a bucket
 ```
 
 Progress is read through a custom `--progress-template`, so parsing does not
