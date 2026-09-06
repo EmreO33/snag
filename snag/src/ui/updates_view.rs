@@ -20,6 +20,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
+        .id_salt("updates_scroll")
         .show(ui, |ui| {
             // --- snag itself -----------------------------------------------
             theme::section_title(ui, &p, "snag");

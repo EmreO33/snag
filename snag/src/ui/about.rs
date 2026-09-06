@@ -11,6 +11,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
+        .id_salt("about_scroll")
         .show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(20.0);

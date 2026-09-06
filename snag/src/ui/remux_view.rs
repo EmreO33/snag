@@ -50,6 +50,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
+        .id_salt("remux_scroll")
         .show(ui, |ui| {
             // --- input file ------------------------------------------------
             theme::card(ui, &p, |ui| {

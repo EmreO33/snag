@@ -286,6 +286,12 @@ pub fn clean_stale_binary() {
 /// Swap the running executable for `bytes`, keeping the old one until restart.
 fn replace_self(bytes: &[u8]) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| format!("cannot locate snag: {e}"))?;
+    replace_binary(&exe, bytes)
+}
+
+/// The file dance behind a self-update, split out from `replace_self` so it can
+/// be exercised against an ordinary file rather than the running process.
+fn replace_binary(exe: &Path, bytes: &[u8]) -> Result<(), String> {
     let dir = exe
         .parent()
         .ok_or_else(|| "snag is not in a directory".to_string())?;
@@ -310,12 +316,12 @@ fn replace_self(bytes: &[u8]) -> Result<(), String> {
     // which is what makes replacing ourselves possible at all.
     let old = PathBuf::from(format!("{}.old", exe.display()));
     let _ = std::fs::remove_file(&old);
-    std::fs::rename(&exe, &old)
+    std::fs::rename(exe, &old)
         .map_err(|e| format!("could not move the running snag aside: {e}"))?;
 
-    if let Err(e) = std::fs::rename(&staged, &exe) {
+    if let Err(e) = std::fs::rename(&staged, exe) {
         // Put the working binary back rather than leaving nothing behind.
-        let _ = std::fs::rename(&old, &exe);
+        let _ = std::fs::rename(&old, exe);
         let _ = std::fs::remove_file(&staged);
         return Err(format!("could not put the new snag in place: {e}"));
     }
@@ -417,7 +423,7 @@ pub fn install(
 
 #[cfg(test)]
 mod tests {
-    use super::sha256_hex;
+    use super::{replace_binary, sha256_hex};
 
     #[test]
     fn sha256_matches_known_vectors() {
@@ -434,5 +440,50 @@ mod tests {
             sha256_hex(&vec![b'a'; 1000]),
             "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3"
         );
+    }
+
+    /// A temporary directory that cleans up after itself.
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("snag-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn replacing_a_binary_keeps_the_old_one_alongside() {
+        let dir = temp_dir("replace");
+        let target = dir.join("snag.exe");
+        std::fs::write(&target, b"the old binary").unwrap();
+
+        replace_binary(&target, b"the new binary").unwrap();
+
+        assert_eq!(std::fs::read(&target).unwrap(), b"the new binary");
+        let old = std::path::PathBuf::from(format!("{}.old", target.display()));
+        assert_eq!(
+            std::fs::read(&old).unwrap(),
+            b"the old binary",
+            "the previous binary should be parked alongside, not discarded"
+        );
+        // No half-written staging file should survive a successful swap.
+        assert!(!dir.join("snag-update.part").exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn replacing_twice_does_not_trip_over_the_previous_backup() {
+        let dir = temp_dir("replace-twice");
+        let target = dir.join("snag.exe");
+        std::fs::write(&target, b"v1").unwrap();
+
+        replace_binary(&target, b"v2").unwrap();
+        replace_binary(&target, b"v3").unwrap();
+
+        assert_eq!(std::fs::read(&target).unwrap(), b"v3");
+        let old = std::path::PathBuf::from(format!("{}.old", target.display()));
+        assert_eq!(std::fs::read(&old).unwrap(), b"v2");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

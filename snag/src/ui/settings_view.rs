@@ -30,6 +30,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
+        .id_salt("settings_scroll")
         .show(ui, |ui| {
             let mut changed = false;
             match app.settings_tab {

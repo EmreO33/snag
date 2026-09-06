@@ -60,6 +60,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
+        .id_salt("queue_scroll")
         .show(ui, |ui| {
             for job in app.jobs.iter().rev() {
                 job_card(ui, &p, job, compact, &mut actions);
