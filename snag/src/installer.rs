@@ -291,9 +291,22 @@ pub fn ffmpeg_plan() -> FfmpegPlan {
     }
 }
 
-/// Install ffmpeg through winget. Windows only; elsewhere the plan is manual.
-#[cfg(windows)]
+/// Install ffmpeg. Only Windows can actually do this without asking for root,
+/// so elsewhere this reports the command to run instead.
+///
+/// Defined for every platform on purpose: gating it behind cfg leaves the code
+/// that calls it conditionally dead, which the compiler rightly complains
+/// about on the platforms where it is never reached.
 pub fn install_ffmpeg(tx: Sender<InstallEvent>, repaint: impl Fn() + Send + 'static) {
+    if !cfg!(windows) {
+        if let FfmpegPlan::Manual { command } = ffmpeg_plan() {
+            let _ = tx.send(InstallEvent::State(InstallState::Failed(format!(
+                "installing ffmpeg here needs root, which snag will not ask for. run: {command}"
+            ))));
+        }
+        repaint();
+        return;
+    }
     std::thread::spawn(move || {
         let _ = tx.send(InstallEvent::Log(format!(
             "running:     winget install --id {FFMPEG_WINGET_ID}"

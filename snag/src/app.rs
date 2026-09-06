@@ -747,9 +747,8 @@ impl SnagApp {
         crate::installer::install(dir, itx, repaint);
     }
 
-    /// Install ffmpeg through the platform's package manager. Only available
-    /// where that can be done without asking for root.
-    #[cfg(windows)]
+    /// Install ffmpeg through the platform's package manager, where that can
+    /// be done without asking for root.
     pub fn start_ffmpeg_install(&mut self, ctx: &egui::Context) {
         if self.setup.ffmpeg_install.busy() {
             return;

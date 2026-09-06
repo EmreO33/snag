@@ -284,8 +284,6 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                             // Windows can do this without asking for
                                             // elevation, so just do it.
                                             crate::installer::FfmpegPlan::Automatic { .. } => {
-                                                let _ = ffmpeg_busy;
-                                                #[cfg(windows)]
                                                 if theme::action_button(
                                                     ui,
                                                     &p,

@@ -7,6 +7,13 @@
 //! simply not offered there.
 
 /// What the user asked for from the tray.
+///
+/// Nothing constructs these where there is no tray, which is expected rather
+/// than an oversight.
+#[cfg_attr(
+    not(any(windows, target_os = "macos")),
+    allow(dead_code, reason = "no tray on this platform")
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayCommand {
     Show,
