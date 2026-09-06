@@ -19,6 +19,9 @@ pub enum InstallKind {
     Scoop,
     /// Put here by the Inno installer, which is what should upgrade it.
     Installed,
+    /// Running from an AppImage. The executable we see lives inside a
+    /// read-only mount, so the file to replace is the .AppImage itself.
+    AppImage,
     /// A portable copy or a loose binary: safe to replace in place.
     Portable,
 }
@@ -28,6 +31,7 @@ impl InstallKind {
         match self {
             InstallKind::Scoop => "installed through scoop",
             InstallKind::Installed => "installed with the windows installer",
+            InstallKind::AppImage => "running as an appimage",
             InstallKind::Portable => "portable or standalone binary",
         }
     }
@@ -37,12 +41,19 @@ impl InstallKind {
         match self {
             InstallKind::Scoop => "this copy is managed by scoop, so it updates with 'scoop update snag' rather than replacing itself.",
             InstallKind::Installed => "this copy was installed with the windows installer, so an update downloads the new installer and runs it.",
+            InstallKind::AppImage => "this appimage replaces itself in place. the previous one is kept alongside until the next launch.",
             InstallKind::Portable => "this copy replaces its own binary in place. the previous one is kept alongside until the next launch.",
         }
     }
 }
 
 pub fn detect_install_kind() -> InstallKind {
+    // An AppImage runs from a read-only mount and exports the path of the
+    // actual .AppImage file, which is the thing an update has to replace.
+    if appimage_path().is_some() {
+        return InstallKind::AppImage;
+    }
+
     let exe = std::env::current_exe().unwrap_or_default();
     let dir = exe.parent().map(Path::to_path_buf).unwrap_or_default();
 
@@ -59,6 +70,13 @@ pub fn detect_install_kind() -> InstallKind {
     }
 
     InstallKind::Portable
+}
+
+/// The .AppImage this process was launched from, if it was.
+pub fn appimage_path() -> Option<PathBuf> {
+    let raw = std::env::var_os("APPIMAGE")?;
+    let path = PathBuf::from(raw);
+    path.is_file().then_some(path)
 }
 
 /// The release asset that matches this platform's bare binary.
@@ -360,6 +378,7 @@ pub fn install(
     std::thread::spawn(move || {
         let asset = match kind {
             InstallKind::Installed => format!("Snag-{version}-windows-setup.exe"),
+            InstallKind::AppImage => format!("Snag-{version}-x86_64.AppImage"),
             _ => binary_asset_name().to_string(),
         };
         let url = asset_url(&version, &asset);
@@ -410,6 +429,15 @@ pub fn install(
                     Err(e) => SelfUpdateState::Error(format!("could not save the installer: {e}")),
                 }
             }
+            InstallKind::AppImage => match appimage_path() {
+                // Replace the .AppImage on disk, not the binary inside its
+                // read-only mount.
+                Some(path) => match replace_binary(&path, &bytes) {
+                    Ok(()) => SelfUpdateState::RestartRequired,
+                    Err(e) => SelfUpdateState::Error(e),
+                },
+                None => SelfUpdateState::Error("could not find this appimage on disk".into()),
+            },
             _ => match replace_self(&bytes) {
                 Ok(()) => SelfUpdateState::RestartRequired,
                 Err(e) => SelfUpdateState::Error(e),

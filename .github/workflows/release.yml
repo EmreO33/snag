@@ -101,8 +101,65 @@ jobs:
           path: ${{ matrix.asset }}
           if-no-files-found: error
 
+
+  # Built inside an older ubuntu than the runner so the result is not pinned to
+  # the runner's glibc: the plain binary needs 2.39, which rules out anything
+  # older than Ubuntu 24.04.
+  appimage:
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    steps:
+      - name: install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends             curl ca-certificates build-essential file desktop-file-utils             libgtk-3-dev libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev             libxcb-xfixes0-dev libx11-dev libgl1-mesa-dev pkg-config
+
+      - uses: actions/checkout@v4
+
+      - name: install rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: build
+        working-directory: snag
+        run: |
+          export RUSTFLAGS="--remap-path-prefix=$HOME/.cargo=[cargo] --remap-path-prefix=$GITHUB_WORKSPACE=[snag]"
+          cargo build --release
+
+      - name: assemble the AppDir
+        run: |
+          set -eux
+          APPDIR=AppDir
+          mkdir -p "$APPDIR/usr/bin"                    "$APPDIR/usr/share/applications"                    "$APPDIR/usr/share/icons/hicolor/256x256/apps"                    "$APPDIR/usr/share/metainfo"
+          cp snag/target/release/snag "$APPDIR/usr/bin/snag"
+          cp packaging/linux/AppRun "$APPDIR/AppRun"
+          chmod +x "$APPDIR/AppRun"
+          cp packaging/linux/snag.desktop "$APPDIR/snag.desktop"
+          cp packaging/linux/snag.desktop "$APPDIR/usr/share/applications/snag.desktop"
+          cp assets/icon.png "$APPDIR/snag.png"
+          cp assets/icon.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/snag.png"
+          desktop-file-validate "$APPDIR/snag.desktop"
+
+      - name: build the AppImage
+        run: |
+          set -eux
+          tag="${{ inputs.tag || github.ref_name }}"
+          version="${tag#v}"
+          curl -fsSL -o appimagetool             https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          # No FUSE inside the container, so run the tool from its own extraction.
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run             AppDir "Snag-$version-x86_64.AppImage"
+          file "Snag-$version-x86_64.AppImage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: Snag-*.AppImage
+          if-no-files-found: error
+
   publish:
-    needs: [windows, unix]
+    needs: [windows, unix, appimage]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -139,10 +196,17 @@ jobs:
               writes nothing else to the machine.
             - **`snag-windows-x86_64.exe`** — the bare executable.
 
-            ## Linux and macOS
+            ## Linux
 
-            Bare binaries. These build in CI but have not been run by anyone yet,
-            so treat them as untested.
+            - **`Snag-*-x86_64.AppImage`** — the recommended Linux build. Runs on
+              any distro with glibc 2.35 or newer, and integrates with your
+              application menu. `chmod +x` it and run it.
+            - **`snag-linux-x86_64`** — the bare binary. Needs glibc 2.39+.
+
+            ## macOS
+
+            `snag-macos-aarch64`, a bare binary. Builds in CI but has not been run
+            by anyone yet, so treat it as untested.
 
             ---
 

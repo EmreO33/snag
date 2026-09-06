@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Snag
+GenericName=Video Downloader
+Comment=A small, fast, native desktop video downloader built on yt-dlp
+Exec=snag %U
+Icon=snag
+Terminal=false
+Categories=AudioVideo;Video;Network;Utility;
+Keywords=video;download;youtube;yt-dlp;audio;convert;
+StartupWMClass=snag

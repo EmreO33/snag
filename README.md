@@ -41,10 +41,17 @@ From the [releases page](https://github.com/EmreO33/snag/releases/latest):
 | `Snag-<version>-windows-portable.zip` | **Portable.** Unzip and run. Keeps everything in a `data` folder beside the executable and writes nothing else to the machine. |
 | `snag-windows-x86_64.exe` | The bare executable, if you would rather manage it yourself. |
 
-**Linux and macOS** &mdash; `snag-linux-x86_64` and `snag-macos-aarch64`, bare
-binaries. Linux has had a first round of testing; macOS has not been run by
-anyone yet. The Linux build needs glibc 2.39 or newer (Ubuntu 24.04, Fedora 40,
-Debian 13) plus `libgtk-3-0`, which it uses only for the file picker.
+**Linux** &mdash; take the **AppImage**:
+
+| file | what it is |
+| --- | --- |
+| `Snag-<version>-x86_64.AppImage` | **Recommended.** Runs on any distro with glibc 2.35+, and integrates with your application menu. `chmod +x` and run. |
+| `snag-linux-x86_64` | The bare binary. Needs glibc 2.39+, so Ubuntu 24.04 or newer. |
+
+Both need `libgtk-3-0` present, which Snag uses only for the file picker.
+
+**macOS** &mdash; `snag-macos-aarch64`, a bare binary. It builds in CI but nobody
+has run it yet.
 
 Every release also publishes `SHA256SUMS.txt` if you want to check a download.
 
@@ -122,8 +129,9 @@ yt-dlp's own self-update.
 
 Snag updates itself on the same schedule, in whichever way suits how it was
 installed: a Scoop copy is left to Scoop (Snag just hands you the command), an
-installed copy downloads the new installer and runs it, and a portable or
-standalone copy replaces its own binary in place. Downloads are checked against
+installed copy downloads the new installer and runs it, an AppImage replaces
+the .AppImage file itself rather than the read-only copy inside its mount, and
+a portable or standalone copy replaces its own binary in place. Downloads are checked against
 the release's published `SHA256SUMS.txt` and thrown away on a mismatch.
 
 ## Settings
@@ -214,6 +222,7 @@ packaging/
   build-windows.ps1     builds the exe, portable zip and installer into dist/
   windows/snag.iss      the Inno Setup installer script
   portable/             the files that ship inside the portable zip
+  linux/                the desktop entry and AppRun used by the AppImage
 
 bucket/
   snag.json             the Scoop manifest, which makes this repo a bucket

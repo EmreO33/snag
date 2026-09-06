@@ -1,0 +1,6 @@
+#!/bin/sh
+# AppImage entry point. Resolve our own directory rather than trusting the
+# working directory, then hand straight over to Snag.
+HERE="$(dirname "$(readlink -f "$0")")"
+export PATH="$HERE/usr/bin:$PATH"
+exec "$HERE/usr/bin/snag" "$@"
