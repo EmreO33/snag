@@ -113,10 +113,18 @@ once, up to the limit you set.
 
 Drag a file onto the window to load it straight into remux.
 
-**updates** &mdash; sites break yt-dlp often, so Snag reads the latest release tag
-from GitHub and compares it to your installed version. Check never, on launch,
-daily or weekly, and either install on a click or let it install automatically.
-The install runs yt-dlp's own self-update.
+**updates** &mdash; keeps both Snag and yt-dlp current.
+
+Sites break yt-dlp often, so Snag reads the latest release tag from GitHub and
+compares it to your installed version. Check never, on launch, daily or weekly,
+and either install on a click or let it install automatically. The install runs
+yt-dlp's own self-update.
+
+Snag updates itself on the same schedule, in whichever way suits how it was
+installed: a Scoop copy is left to Scoop (Snag just hands you the command), an
+installed copy downloads the new installer and runs it, and a portable or
+standalone copy replaces its own binary in place. Downloads are checked against
+the release's published `SHA256SUMS.txt` and thrown away on a mismatch.
 
 ## Settings
 
@@ -197,6 +205,7 @@ src/
   remux.rs       ffmpeg operations
   updater.rs     version check and self-update
   bootstrap.rs   resolves where the config lives
+  selfupdate.rs  updating Snag itself
   installer.rs   fetches yt-dlp from its GitHub releases
   icon.rs        the window icon, rasterized at startup
   ui/            one module per screen
