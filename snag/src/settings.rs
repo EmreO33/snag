@@ -464,10 +464,32 @@ impl Settings {
         Self::config_dir().join("settings.json")
     }
 
-    pub fn load() -> Self {
-        match std::fs::read_to_string(Self::config_path()) {
-            Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
-            Err(_) => Self::default(),
+    /// Load the settings, along with a warning if the file was unreadable.
+    ///
+    /// A corrupt file is never silently discarded: it is kept alongside so it
+    /// can be salvaged, and the caller is told, rather than the user quietly
+    /// losing every setting and being dropped back into first-run setup.
+    pub fn load() -> (Self, Option<String>) {
+        let path = Self::config_path();
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(raw) => raw,
+            // No file yet simply means this is a first run.
+            Err(_) => return (Self::default(), None),
+        };
+
+        match serde_json::from_str(&raw) {
+            Ok(settings) => (settings, None),
+            Err(e) => {
+                let kept = path.with_extension("json.invalid");
+                let note = match std::fs::rename(&path, &kept) {
+                    Ok(()) => format!(
+                        "settings could not be read ({e}), so defaults are in use. the old file was kept as {}",
+                        kept.display()
+                    ),
+                    Err(_) => format!("settings could not be read ({e}), so defaults are in use"),
+                };
+                (Self::default(), Some(note))
+            }
         }
     }
 

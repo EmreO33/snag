@@ -189,7 +189,7 @@ pub struct SnagApp {
 
 impl SnagApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let settings = Settings::load();
+        let (settings, load_warning) = Settings::load();
         let palette = theme::palette(settings.appearance.theme, settings.appearance.accent);
         theme::apply(&cc.egui_ctx, &palette, settings.appearance.ui_scale);
 
@@ -237,6 +237,11 @@ impl SnagApp {
             dirty_since: None,
             settings,
         };
+
+        // Surface a config we could not read before anything else.
+        if let Some(warning) = load_warning {
+            app.toast(warning, true);
+        }
 
         if needs_setup {
             app.start_detection(&cc.egui_ctx);

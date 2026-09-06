@@ -184,12 +184,15 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let busy = app.update_state.busy();
-                        let can_install = matches!(
-                            app.update_state,
-                            UpdateState::Available { .. } | UpdateState::UpToDate
-                        ) && !busy;
+                        // Enabled only when there is genuinely something to
+                        // install, matching the snag button above. Offering
+                        // "update now" on an up-to-date copy just invites a
+                        // pointless reinstall.
+                        let available = matches!(app.update_state, UpdateState::Available { .. });
 
-                        if theme::action_button(ui, &p, "update now", true, can_install).clicked() {
+                        if theme::action_button(ui, &p, "update now", true, available && !busy)
+                            .clicked()
+                        {
                             app.start_update_install(&ctx);
                         }
                         if theme::action_button(ui, &p, "check", false, !busy).clicked() {

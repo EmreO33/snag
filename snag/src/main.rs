@@ -25,7 +25,7 @@ fn print_command_and_exit() -> bool {
         return false;
     };
     let url = args.get(pos + 1).map(String::as_str).unwrap_or("<link>");
-    let settings = settings::Settings::load();
+    let (settings, _) = settings::Settings::load();
     let mode = match args.iter().find_map(|a| a.strip_prefix("--mode=")) {
         Some("audio") => settings::Mode::Audio,
         Some("mute") => settings::Mode::Mute,
