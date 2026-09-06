@@ -45,6 +45,22 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             });
 
             ui.add_space(16.0);
+            theme::section_title(ui, &p, "licence");
+            theme::card(ui, &p, |ui| {
+                for line in [
+                    "snag is free software under the GNU General Public License, version 3 or later. you may use, study, change and share it.",
+                    "it comes with absolutely no warranty. the full licence text ships with snag and is in the LICENSE file in the source.",
+                    "the source lives at github.com/EmreO33/snag.",
+                ] {
+                    ui.label(egui::RichText::new(line).size(13.0).color(p.dim));
+                    ui.add_space(6.0);
+                }
+                if theme::pill(ui, &p, "copy the source link", false, true).clicked() {
+                    util::set_clipboard_text("https://github.com/EmreO33/snag");
+                }
+            });
+
+            ui.add_space(16.0);
             theme::section_title(ui, &p, "credit where it is due");
             theme::card(ui, &p, |ui| {
                 for line in [

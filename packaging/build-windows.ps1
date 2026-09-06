@@ -84,6 +84,8 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item $exe (Join-Path $stage "snag.exe")
 Copy-Item (Join-Path $PSScriptRoot "portable\portable.txt") $stage
 Copy-Item (Join-Path $PSScriptRoot "portable\README.txt") $stage
+# A GPL binary should travel with its licence.
+Copy-Item (Join-Path $root "LICENSE") (Join-Path $stage "LICENSE.txt")
 
 $zip = Join-Path $dist "Snag-$Version-windows-portable.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }

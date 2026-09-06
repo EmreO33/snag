@@ -46,6 +46,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\..\dist
 OutputBaseFilename=Snag-{#AppVersion}-windows-setup
 SetupIconFile=..\..\assets\icon.ico
+LicenseFile=..\..\LICENSE
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName} {#AppVersion}
 WizardStyle=modern

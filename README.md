@@ -243,6 +243,18 @@ Windows reports are the most actionable right now, since that is the only
 platform the app has been run on; Linux and macOS reports are welcome too and
 help confirm whether those builds actually work.
 
+## Licence
+
+Snag is free software under the **GNU General Public License, version 3 or
+later**. You may use, study, change and share it; if you distribute a modified
+version, it has to stay under the same licence and you have to make the source
+available. The full text is in [LICENSE](LICENSE).
+
+It comes with absolutely no warranty.
+
+yt-dlp and ffmpeg are separate projects under their own licences. Snag runs
+them as external programs and does not bundle or link against either.
+
 ## A note
 
 You are responsible for what you download. Respect the terms of the sites you
