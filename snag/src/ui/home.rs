@@ -44,6 +44,9 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             Vec2::new(box_width, 0.0),
             egui::Layout::top_down(egui::Align::Min),
             |ui| {
+                // --- a link the user just copied --------------------------
+                offered_link(app, ui, &p);
+
                 // --- the link field ---------------------------------------
                 let mut submit = false;
                 egui::Frame::none()
@@ -277,4 +280,42 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
             });
         }
     });
+}
+
+/// The strip that appears when clipboard watching spots a link. Deliberately
+/// an offer rather than an action: copying a link is not the same as asking
+/// for it to be downloaded.
+fn offered_link(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
+    let Some(url) = app.offered_link.clone() else {
+        return;
+    };
+    let ctx = ui.ctx().clone();
+
+    egui::Frame::none()
+        .fill(p.card)
+        .rounding(Rounding::same(12.0))
+        .stroke(egui::Stroke::new(1.0_f32, p.accent))
+        .inner_margin(egui::Margin::symmetric(14.0, 10.0))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new("you copied a link")
+                            .size(13.0)
+                            .color(p.text),
+                    );
+                    let short: String = url.chars().take(58).collect();
+                    ui.label(egui::RichText::new(short).size(11.0).color(p.dim));
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if theme::pill(ui, p, "dismiss", false, true).clicked() {
+                        app.offered_link = None;
+                    }
+                    if theme::action_button(ui, p, "use it", true, true).clicked() {
+                        app.accept_offered_link(&ctx);
+                    }
+                });
+            });
+        });
+    ui.add_space(12.0);
 }

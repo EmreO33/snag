@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::process::Child;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -15,6 +15,7 @@ use crate::remux::{RemuxEvent, RemuxOp, RemuxState};
 use crate::selfupdate::{self, InstallKind, SelfUpdateEvent, SelfUpdateState};
 use crate::settings::{Mode, Settings};
 use crate::theme::{self, Palette};
+use crate::tray::{Tray, TrayCommand};
 use crate::ui;
 use crate::updater::{self, UpdateEvent, UpdateState};
 
@@ -37,6 +38,7 @@ pub enum SettingsTab {
     Audio,
     Metadata,
     Processing,
+    Background,
     Network,
     Advanced,
 }
@@ -48,6 +50,7 @@ impl SettingsTab {
         SettingsTab::Audio,
         SettingsTab::Metadata,
         SettingsTab::Processing,
+        SettingsTab::Background,
         SettingsTab::Network,
         SettingsTab::Advanced,
     ];
@@ -58,6 +61,7 @@ impl SettingsTab {
             SettingsTab::Audio => "audio",
             SettingsTab::Metadata => "metadata",
             SettingsTab::Processing => "local processing",
+            SettingsTab::Background => "background",
             SettingsTab::Network => "network",
             SettingsTab::Advanced => "advanced",
         }
@@ -156,6 +160,7 @@ pub struct SnagApp {
     saved_snapshot: Settings,
     dirty_since: Option<Instant>,
     applied_appearance: crate::settings::Appearance,
+    applied_background: crate::settings::BackgroundSettings,
 
     pub palette: Palette,
     /// The logo, uploaded once and tinted per theme wherever it is drawn.
@@ -175,6 +180,23 @@ pub struct SnagApp {
     pub height_override: Option<u32>,
 
     pub history: History,
+
+    /// Set while the window is hidden and Snag is only in the tray.
+    pub hidden: bool,
+    /// The last sane window size seen while visible. Hiding a viewport loses
+    /// its geometry: it comes back a few pixels square unless the size is put
+    /// back, and one command on the frame it reappears is not enough, so this
+    /// is reasserted for a few frames afterwards.
+    tray: Option<Tray>,
+    clip_stop: Option<Arc<AtomicBool>>,
+    /// Shared with the clipboard watcher, which has to act on its own while
+    /// the window is minimised and the UI loop is asleep.
+    clip_hidden: Arc<AtomicBool>,
+    clip_restore: Arc<AtomicBool>,
+    clip_rx: Receiver<crate::clipboard::Found>,
+    clip_tx: Sender<crate::clipboard::Found>,
+    /// A link the user copied, waiting to be accepted or dismissed.
+    pub offered_link: Option<String>,
 
     pub jobs: Vec<Job>,
     job_tx: Sender<JobEvent>,
@@ -215,6 +237,7 @@ impl SnagApp {
         let (setup_tx, setup_rx) = channel();
         let (app_tx, app_rx) = channel();
         let (probe_tx, probe_rx) = channel();
+        let (clip_tx, clip_rx) = channel();
         let needs_setup = !settings.setup_done;
 
         let logo = crate::icon::mark_image().map(|image| {
@@ -226,6 +249,7 @@ impl SnagApp {
             logo,
             saved_snapshot: settings.clone(),
             applied_appearance: settings.appearance.clone(),
+            applied_background: settings.background.clone(),
             palette,
             view: if needs_setup { View::Setup } else { View::Home },
             settings_tab: SettingsTab::Video,
@@ -239,6 +263,15 @@ impl SnagApp {
             whole_playlist: false,
             height_override: None,
             history: History::load(),
+            hidden: false,
+
+            tray: None,
+            clip_stop: None,
+            clip_hidden: Arc::new(AtomicBool::new(false)),
+            clip_restore: Arc::new(AtomicBool::new(false)),
+            clip_rx,
+            clip_tx,
+            offered_link: None,
             jobs: Vec::new(),
             job_tx,
             job_rx,
@@ -267,6 +300,8 @@ impl SnagApp {
         if let Some(warning) = load_warning {
             app.toast(warning, true);
         }
+
+        app.sync_background_features(&cc.egui_ctx);
 
         if needs_setup {
             app.start_detection(&cc.egui_ctx);
@@ -869,6 +904,133 @@ impl SnagApp {
         }
     }
 
+    /// Start or stop the tray icon and the clipboard watcher to match settings.
+    /// Called whenever those settings might have changed, and once at startup.
+    fn sync_background_features(&mut self, ctx: &egui::Context) {
+        let want_tray = self.settings.background.run_in_background && crate::tray::supported();
+        if want_tray && self.tray.is_none() {
+            self.tray = crate::tray::create();
+            if self.tray.is_none() {
+                self.toast(
+                    "could not add a tray icon, so snag will keep its window",
+                    true,
+                );
+                self.settings.background.run_in_background = false;
+            }
+        } else if !want_tray && self.tray.is_some() {
+            // Dropping it takes the icon out of the tray.
+            self.tray = None;
+        }
+
+        self.clip_restore.store(
+            self.settings.background.show_on_copied_link,
+            Ordering::Relaxed,
+        );
+        let want_clip = self.settings.background.watch_clipboard;
+        match (&self.clip_stop, want_clip) {
+            (None, true) => {
+                let stop = Arc::new(AtomicBool::new(false));
+                crate::clipboard::watch(
+                    stop.clone(),
+                    self.clip_hidden.clone(),
+                    self.clip_restore.clone(),
+                    self.clip_tx.clone(),
+                    Self::repainter(ctx),
+                );
+                self.clip_stop = Some(stop);
+            }
+            (Some(stop), false) => {
+                stop.store(true, Ordering::Relaxed);
+                self.clip_stop = None;
+                self.offered_link = None;
+            }
+            _ => {}
+        }
+    }
+
+    /// Bring the window back from the tray, at the size it had before.
+    fn show_window(&mut self, ctx: &egui::Context) {
+        self.hidden = false;
+        self.clip_hidden.store(false, Ordering::Relaxed);
+        crate::window::restore();
+        ctx.request_repaint();
+    }
+
+    /// Note the platform window once it exists, so it can be restored later
+    /// from any thread.
+    fn track_window(&mut self) {
+        if !self.hidden {
+            crate::window::remember_main_window();
+        }
+    }
+
+    fn handle_tray(&mut self, ctx: &egui::Context) {
+        let Some(command) = self.tray.as_ref().and_then(Tray::poll) else {
+            return;
+        };
+        match command {
+            TrayCommand::Show => self.show_window(ctx),
+            TrayCommand::Quit => {
+                // A real quit, not another trip to the tray.
+                self.settings.background.run_in_background = false;
+                self.tray = None;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+    }
+
+    /// Closing the window means "get out of the way", not "quit", when the
+    /// user has asked for that and there is a tray icon to get back from.
+    fn handle_close_request(&mut self, ctx: &egui::Context) {
+        if !ctx.input(|i| i.viewport().close_requested()) {
+            return;
+        }
+        if self.tray.is_some() && self.settings.background.run_in_background {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            // Minimise rather than hide: a hidden viewport loses its geometry
+            // and comes back a few pixels square, which eframe gives no way to
+            // put right. Minimised keeps the window intact, and the tray is
+            // still how you get it back.
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+            self.hidden = true;
+            self.clip_hidden.store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn drain_clipboard(&mut self, ctx: &egui::Context) {
+        while let Ok(found) = self.clip_rx.try_recv() {
+            // Never nag about something already queued or already offered.
+            if self.jobs.iter().any(|j| j.url == found.url)
+                || self.offered_link.as_deref() == Some(found.url.as_str())
+            {
+                continue;
+            }
+            self.offered_link = Some(found.url.clone());
+
+            // Notifying and raising the window are done by the watcher itself,
+            // which is still awake when this loop is not.
+            if let Some(tray) = &self.tray {
+                tray.set_pending(true);
+            }
+            self.hidden = false;
+            ctx.request_repaint();
+        }
+    }
+
+    /// Accept the offered link: fill the box and bring Snag forward.
+    pub fn accept_offered_link(&mut self, ctx: &egui::Context) {
+        if let Some(tray) = &self.tray {
+            tray.set_pending(false);
+        }
+        if let Some(url) = self.offered_link.take() {
+            self.url_input = url;
+            self.view = View::Home;
+            if self.hidden {
+                self.show_window(ctx);
+            }
+        }
+    }
+
     fn autosave(&mut self) {
         if self.view == View::Setup {
             return;
@@ -925,6 +1087,19 @@ impl eframe::App for SnagApp {
         self.drain_setup_events();
         self.pump_queue(ctx);
         self.pump_probe(ctx);
+        self.track_window();
+        self.handle_tray(ctx);
+        self.drain_clipboard(ctx);
+        self.handle_close_request(ctx);
+        if self.applied_background != self.settings.background {
+            self.applied_background = self.settings.background.clone();
+            self.sync_background_features(ctx);
+        }
+        // Hidden, Snag still has to wake up often enough to notice a copied
+        // link and to keep any downloads moving.
+        if self.hidden {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
         self.handle_dropped_files(ctx);
         self.autosave();
 

@@ -2,6 +2,7 @@
 
 mod app;
 mod bootstrap;
+mod clipboard;
 mod history;
 mod icon;
 mod installer;
@@ -11,9 +12,11 @@ mod remux;
 mod selfupdate;
 mod settings;
 mod theme;
+mod tray;
 mod ui;
 mod updater;
 mod util;
+mod window;
 mod ytdlp;
 
 use eframe::egui;
@@ -86,6 +89,25 @@ fn install_ytdlp_and_exit() -> bool {
     true
 }
 
+/// `snag --notify-test` sends one desktop notification and reports whether the
+/// desktop accepted it. Notifications are the one feature that can fail
+/// silently on someone else's machine, so there is a way to check.
+fn notify_test_and_exit() -> bool {
+    if !std::env::args().any(|a| a == "--notify-test") {
+        return false;
+    }
+    let ok = clipboard::notify_found("https://example.com/a-video");
+    println!(
+        "notification accepted by the desktop: {ok}{}",
+        if ok {
+            ""
+        } else {
+            " (nothing was shown; on windows an unpackaged app needs a registered app id)"
+        }
+    );
+    true
+}
+
 /// A link passed on the command line, so `snag <url>` fills the box ready to
 /// go. This is also what a future "open with Snag" or notification click would
 /// use.
@@ -110,7 +132,7 @@ fn startup_view() -> Option<app::View> {
 }
 
 fn main() -> eframe::Result<()> {
-    if print_command_and_exit() || install_ytdlp_and_exit() {
+    if print_command_and_exit() || install_ytdlp_and_exit() || notify_test_and_exit() {
         return Ok(());
     }
 

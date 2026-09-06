@@ -52,6 +52,11 @@ pub fn icon_data() -> Option<egui::IconData> {
     })
 }
 
+/// The launcher icon as raw RGBA, for the system tray.
+pub fn tray_rgba() -> Option<(u32, u32, Vec<u8>)> {
+    decode(ICON_PNG)
+}
+
 /// The bare mark as an egui image, ready to be tinted.
 pub fn mark_image() -> Option<egui::ColorImage> {
     let (width, height, rgba) = decode(MARK_PNG)?;

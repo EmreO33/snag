@@ -118,6 +118,12 @@ just the one you linked or all of them &mdash; rather than silently taking one.
 open, show-in-folder, copy-link and a per-job log. Runs several downloads at
 once, up to the limit you set.
 
+**background** &mdash; optional, and off by default. Closing the window can put
+Snag in the system tray instead of quitting it, and it can watch the clipboard:
+copy a link anywhere and Snag offers it, rather than downloading it behind your
+back. Nothing but the clipboard's text is read, none of it is stored, and none
+of it leaves the machine.
+
 **history** &mdash; every finished download, remembered across restarts. Open the
 file, show it in its folder, download it again, or copy the link back out. Says
 plainly when a file has been moved or deleted rather than offering a button
@@ -210,6 +216,7 @@ snag --print-command <link> --mode=audio
 snag --install-ytdlp                 # install yt-dlp headlessly and exit
 snag --install-ytdlp /some/dir       # ...into a specific folder
 snag <link>                          # open with the link already in the box
+snag --notify-test                   # check whether desktop notifications work
 ```
 
 `--print-command` prints one argument per line using the current settings, which
@@ -229,6 +236,9 @@ src/
   updater.rs     version check and self-update
   bootstrap.rs   resolves where the config lives
   probe.rs       asks yt-dlp what a link is, before downloading it
+  clipboard.rs   watching for copied links
+  tray.rs        the system tray icon
+  window.rs      restoring the window, which eframe cannot do reliably
   history.rs     what has been downloaded, across restarts
   selfupdate.rs  updating Snag itself
   installer.rs   fetches yt-dlp from its GitHub releases

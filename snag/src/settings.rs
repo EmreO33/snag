@@ -397,6 +397,19 @@ impl Default for NetworkSettings {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+#[serde(default)]
+pub struct BackgroundSettings {
+    /// Closing the window hides Snag to the tray instead of quitting it.
+    pub run_in_background: bool,
+    /// Watch the clipboard and offer links as they are copied.
+    pub watch_clipboard: bool,
+    /// Bring the window back when a link is copied. Off by default: hiding
+    /// Snag is a request to be left alone. This exists because a desktop
+    /// notification is not dependable everywhere, and this is.
+    pub show_on_copied_link: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
 pub struct UpdaterSettings {
@@ -450,6 +463,7 @@ pub struct Settings {
     pub audio: AudioSettings,
     pub metadata: MetadataSettings,
     pub processing: ProcessingSettings,
+    pub background: BackgroundSettings,
     pub network: NetworkSettings,
     pub updater: UpdaterSettings,
     pub advanced: AdvancedSettings,

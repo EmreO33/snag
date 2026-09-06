@@ -39,6 +39,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                 SettingsTab::Audio => changed |= audio(app, ui),
                 SettingsTab::Metadata => changed |= metadata(app, ui),
                 SettingsTab::Processing => changed |= processing(app, ui),
+                SettingsTab::Background => changed |= background(app, ui),
                 SettingsTab::Network => changed |= network(app, ui),
                 SettingsTab::Advanced => changed |= advanced(app, ui),
             }
@@ -485,6 +486,62 @@ fn processing(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         &p,
         "more fragments at once is faster on fast connections and rougher on slow ones.",
     );
+
+    changed
+}
+
+fn background(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
+    let p = app.palette;
+    let mut changed = false;
+
+    theme::section_title(ui, &p, "keep running when closed");
+    if crate::tray::supported() {
+        changed |= theme::toggle_row(
+            ui,
+            &p,
+            "run in the background",
+            "closing the window puts snag in the system tray instead of quitting it. click the tray icon to bring it back, or use quit there to close it properly.",
+            &mut app.settings.background.run_in_background,
+        );
+    } else {
+        theme::card(ui, &p, |ui| {
+            ui.label(
+                egui::RichText::new("not available on this platform")
+                    .size(13.0)
+                    .color(p.dim),
+            );
+        });
+        theme::note_text(
+            ui,
+            &p,
+            "a tray icon on linux would need libayatana-appindicator at build time, which would add a system dependency to the appimage for an optional feature.",
+        );
+    }
+
+    theme::section_title(ui, &p, "clipboard");
+    changed |= theme::toggle_row(
+        ui,
+        &p,
+        "watch the clipboard for links",
+        "when you copy a link, snag offers it rather than downloading it. nothing is read but the clipboard text, nothing is stored, and nothing is sent anywhere.",
+        &mut app.settings.background.watch_clipboard,
+    );
+
+    if app.settings.background.watch_clipboard {
+        changed |= theme::toggle_row(
+            ui,
+            &p,
+            "bring snag back when a link is copied",
+            "off by default, because hiding snag is a request to be left alone. worth turning on if notifications do not reach you.",
+            &mut app.settings.background.show_on_copied_link,
+        );
+
+        theme::note_text(
+            ui,
+            &p,
+            "while snag is hidden it also tries a desktop notification. that works on linux and macos, but windows silently drops notifications from apps that were not installed from the store, so do not rely on it there.",
+        );
+    }
 
     changed
 }
