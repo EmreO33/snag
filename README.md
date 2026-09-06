@@ -42,9 +42,9 @@ From the [releases page](https://github.com/EmreO33/snag/releases/latest):
 | `snag-windows-x86_64.exe` | The bare executable, if you would rather manage it yourself. |
 
 **Linux and macOS** &mdash; `snag-linux-x86_64` and `snag-macos-aarch64`, bare
-binaries. These build in CI but nobody has run them yet. The Linux build needs
-glibc 2.39 or newer (Ubuntu 24.04, Fedora 40, Debian 13) plus `libgtk-3-0`,
-which it uses only for the file picker.
+binaries. Linux has had a first round of testing; macOS has not been run by
+anyone yet. The Linux build needs glibc 2.39 or newer (Ubuntu 24.04, Fedora 40,
+Debian 13) plus `libgtk-3-0`, which it uses only for the file picker.
 
 Every release also publishes `SHA256SUMS.txt` if you want to check a download.
 

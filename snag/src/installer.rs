@@ -11,14 +11,26 @@ use std::sync::mpsc::Sender;
 
 use crate::util;
 
-/// yt-dlp publishes one standalone binary per platform under `latest/download`.
+/// The standalone yt-dlp build for this platform.
+///
+/// Note what is deliberately not here: the bare `yt-dlp` asset. That one is a
+/// Python zipapp with a `#!/usr/bin/env python3` shebang, so on a machine
+/// without Python it fails to exec with ENOENT, which surfaces as a thoroughly
+/// misleading "No such file or directory". Every name below is a real
+/// self-contained binary.
 pub fn asset_name() -> &'static str {
     if cfg!(windows) {
-        "yt-dlp.exe"
+        if cfg!(target_arch = "aarch64") {
+            "yt-dlp_arm64.exe"
+        } else {
+            "yt-dlp.exe"
+        }
     } else if cfg!(target_os = "macos") {
         "yt-dlp_macos"
+    } else if cfg!(target_arch = "aarch64") {
+        "yt-dlp_linux_aarch64"
     } else {
-        "yt-dlp"
+        "yt-dlp_linux"
     }
 }
 
@@ -174,8 +186,15 @@ pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send
                 }));
             }
             Err(e) => {
+                // ENOENT here almost never means the file is missing: it means
+                // the kernel could not exec it. Say something useful.
+                let hint = if cfg!(unix) && e.contains("No such file or directory") {
+                    " (the file is there, but it would not execute. this build should be self-contained, so it may have downloaded incompletely: try again.)"
+                } else {
+                    ""
+                };
                 let _ = tx.send(InstallEvent::State(InstallState::Failed(format!(
-                    "downloaded, but it would not run: {e}"
+                    "downloaded, but it would not run: {e}{hint}"
                 ))));
             }
         }
@@ -227,4 +246,26 @@ pub fn detect_ffmpeg(configured: &str) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    /// The bare `yt-dlp` asset is a Python zipapp. Downloading it onto a machine
+    /// without Python produces a baffling ENOENT, so it must never be chosen.
+    #[test]
+    fn picks_a_self_contained_ytdlp_build() {
+        let name = super::asset_name();
+        assert_ne!(name, "yt-dlp", "that asset needs a python interpreter");
+        assert!(
+            [
+                "yt-dlp.exe",
+                "yt-dlp_arm64.exe",
+                "yt-dlp_macos",
+                "yt-dlp_linux",
+                "yt-dlp_linux_aarch64",
+            ]
+            .contains(&name),
+            "unexpected asset name: {name}"
+        );
+    }
 }
