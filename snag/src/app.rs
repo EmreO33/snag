@@ -10,6 +10,7 @@ use eframe::egui;
 use crate::installer::{InstallEvent, InstallState};
 use crate::jobs::{Job, JobEvent, JobState};
 use crate::remux::{RemuxEvent, RemuxOp, RemuxState};
+use crate::selfupdate::{self, InstallKind, SelfUpdateEvent, SelfUpdateState};
 use crate::settings::{Mode, Settings};
 use crate::theme::{self, Palette};
 use crate::ui;
@@ -177,6 +178,12 @@ pub struct SnagApp {
     upd_tx: Sender<UpdateEvent>,
     upd_rx: Receiver<UpdateEvent>,
 
+    pub app_update_state: SelfUpdateState,
+    pub install_kind: InstallKind,
+    pub app_update_log: Vec<String>,
+    app_tx: Sender<SelfUpdateEvent>,
+    app_rx: Receiver<SelfUpdateEvent>,
+
     pub toast: Option<Toast>,
 }
 
@@ -190,6 +197,7 @@ impl SnagApp {
         let (remux_tx, remux_rx) = channel();
         let (upd_tx, upd_rx) = channel();
         let (setup_tx, setup_rx) = channel();
+        let (app_tx, app_rx) = channel();
         let needs_setup = !settings.setup_done;
 
         let logo = crate::icon::mark_image().map(|image| {
@@ -215,6 +223,11 @@ impl SnagApp {
             setup: SetupState::new(&settings),
             setup_tx,
             setup_rx,
+            app_update_state: SelfUpdateState::Unknown,
+            install_kind: selfupdate::detect_install_kind(),
+            app_update_log: Vec::new(),
+            app_tx,
+            app_rx,
             update_state: UpdateState::Unknown,
             ytdlp_version: String::new(),
             update_log: Vec::new(),
@@ -443,6 +456,56 @@ impl SnagApp {
         }
     }
 
+    fn drain_app_update_events(&mut self) {
+        while let Ok(ev) = self.app_rx.try_recv() {
+            match ev {
+                SelfUpdateEvent::Log(l) => self.app_update_log.push(l),
+                SelfUpdateEvent::State(st) => {
+                    match &st {
+                        SelfUpdateState::Available { latest } => {
+                            self.toast(format!("snag {latest} is available"), false)
+                        }
+                        SelfUpdateState::RestartRequired => {
+                            self.toast("update installed, restart snag to use it", false)
+                        }
+                        SelfUpdateState::HandedOff => {
+                            self.toast("the installer is taking over", false)
+                        }
+                        SelfUpdateState::Error(e) => {
+                            let short: String = e.chars().take(90).collect();
+                            self.toast(short, true);
+                        }
+                        _ => {}
+                    }
+                    self.app_update_state = st;
+                }
+            }
+        }
+    }
+
+    pub fn start_app_update_check(&mut self, ctx: &egui::Context) {
+        if self.app_update_state.busy() {
+            return;
+        }
+        self.app_update_log.clear();
+        selfupdate::check(self.app_tx.clone(), Self::repainter(ctx));
+    }
+
+    pub fn start_app_update_install(&mut self, ctx: &egui::Context) {
+        if self.app_update_state.busy() {
+            return;
+        }
+        let SelfUpdateState::Available { latest } = self.app_update_state.clone() else {
+            return;
+        };
+        selfupdate::install(
+            latest,
+            self.install_kind,
+            self.app_tx.clone(),
+            Self::repainter(ctx),
+        );
+    }
+
     pub fn start_update_check(&mut self, ctx: &egui::Context, auto_install: bool) {
         if self.update_state.busy() {
             return;
@@ -494,6 +557,9 @@ impl SnagApp {
         if due {
             let auto = self.settings.updater.auto_install;
             self.start_update_check(ctx, auto);
+            if self.settings.updater.check_app {
+                self.start_app_update_check(ctx);
+            }
         }
     }
 
@@ -712,6 +778,7 @@ impl eframe::App for SnagApp {
         self.drain_job_events();
         self.drain_remux_events();
         self.drain_update_events();
+        self.drain_app_update_events();
         self.drain_setup_events();
         self.pump_queue(ctx);
         self.handle_dropped_files(ctx);

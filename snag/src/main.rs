@@ -6,6 +6,7 @@ mod icon;
 mod installer;
 mod jobs;
 mod remux;
+mod selfupdate;
 mod settings;
 mod theme;
 mod ui;
@@ -102,6 +103,10 @@ fn main() -> eframe::Result<()> {
     if print_command_and_exit() || install_ytdlp_and_exit() {
         return Ok(());
     }
+
+    // A previous self-update leaves the old binary beside us; it can only be
+    // deleted once it is no longer the running process.
+    selfupdate::clean_stale_binary();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

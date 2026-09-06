@@ -403,6 +403,8 @@ pub struct UpdaterSettings {
     pub check: UpdateCheck,
     pub auto_install: bool,
     pub last_check_unix: u64,
+    /// Whether the same schedule also looks for a newer Snag.
+    pub check_app: bool,
 }
 
 impl Default for UpdaterSettings {
@@ -411,6 +413,7 @@ impl Default for UpdaterSettings {
             check: UpdateCheck::OnLaunch,
             auto_install: false,
             last_check_unix: 0,
+            check_app: true,
         }
     }
 }

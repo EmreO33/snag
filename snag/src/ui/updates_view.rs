@@ -1,9 +1,11 @@
 use eframe::egui;
 
 use crate::app::SnagApp;
+use crate::selfupdate::{InstallKind, SelfUpdateState};
 use crate::settings::UpdateCheck;
 use crate::theme;
 use crate::updater::UpdateState;
+use crate::util;
 
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
@@ -13,12 +15,132 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
         ui,
         &p,
         "updates",
-        "snag downloads through yt-dlp, and sites break it often. keeping it current is the single best fix for a download that suddenly stopped working.",
+        "snag downloads through yt-dlp, and sites break it often. keeping yt-dlp current is the single best fix for a download that suddenly stopped working.",
     );
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            // --- snag itself -----------------------------------------------
+            theme::section_title(ui, &p, "snag");
+            theme::card(ui, &p, |ui| {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "snag {}",
+                                crate::selfupdate::current_version()
+                            ))
+                            .size(16.0)
+                            .color(p.text)
+                            .strong(),
+                        );
+                        ui.add_space(2.0);
+                        let (msg, color) = match &app.app_update_state {
+                            SelfUpdateState::Unknown => ("not checked yet".to_string(), p.dim),
+                            SelfUpdateState::Checking => ("checking github...".to_string(), p.dim),
+                            SelfUpdateState::UpToDate => ("up to date".to_string(), p.good),
+                            SelfUpdateState::Available { latest } => {
+                                (format!("{latest} is available"), p.accent)
+                            }
+                            SelfUpdateState::Downloading { .. } => {
+                                ("downloading...".to_string(), p.dim)
+                            }
+                            SelfUpdateState::RestartRequired => (
+                                "updated. restart snag to use the new version.".to_string(),
+                                p.good,
+                            ),
+                            SelfUpdateState::HandedOff => (
+                                "the installer is running. snag will close.".to_string(),
+                                p.good,
+                            ),
+                            SelfUpdateState::Error(e) => (e.clone(), p.bad),
+                        };
+                        let short: String = msg.chars().take(120).collect();
+                        ui.label(egui::RichText::new(short).size(12.0).color(color));
+                    });
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let busy = app.app_update_state.busy();
+                        let available =
+                            matches!(app.app_update_state, SelfUpdateState::Available { .. });
+
+                        // A copy that Scoop owns must be updated through Scoop,
+                        // or the two end up fighting over the same files.
+                        if app.install_kind == InstallKind::Scoop {
+                            if theme::action_button(ui, &p, "copy the command", true, available)
+                                .clicked()
+                            {
+                                util::set_clipboard_text("scoop update snag");
+                                app.toast("copied: scoop update snag", false);
+                            }
+                        } else if theme::action_button(ui, &p, "update snag", true, available && !busy)
+                            .clicked()
+                        {
+                            app.start_app_update_install(&ctx);
+                        }
+
+                        if theme::action_button(ui, &p, "check", false, !busy).clicked() {
+                            app.start_app_update_check(&ctx);
+                        }
+                    });
+                });
+
+                if let SelfUpdateState::Downloading { got, total } = &app.app_update_state {
+                    ui.add_space(10.0);
+                    let frac = app.app_update_state.fraction();
+                    theme::progress_bar(ui, &p, frac.unwrap_or(0.0), frac.is_none());
+                    ui.add_space(6.0);
+                    let label = if *total > 0 {
+                        format!(
+                            "{} / {}",
+                            util::human_bytes(*got as f64),
+                            util::human_bytes(*total as f64)
+                        )
+                    } else {
+                        util::human_bytes(*got as f64)
+                    };
+                    ui.label(egui::RichText::new(label).size(12.0).color(p.dim));
+                }
+
+                if app.app_update_state == SelfUpdateState::RestartRequired {
+                    ui.add_space(10.0);
+                    if theme::action_button(ui, &p, "close snag", true, true).clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                }
+            });
+
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(app.install_kind.label())
+                        .size(12.0)
+                        .color(p.faint),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if theme::pill(ui, &p, "release notes", false, true).clicked() {
+                        ctx.open_url(egui::OpenUrl::new_tab(crate::selfupdate::releases_url()));
+                    }
+                });
+            });
+            theme::note_text(ui, &p, app.install_kind.update_note());
+
+            let mut check_app = app.settings.updater.check_app;
+            if theme::toggle_row(
+                ui,
+                &p,
+                "check for snag updates too",
+                "uses the same schedule as the yt-dlp check below. nothing is ever installed without you asking.",
+                &mut check_app,
+            ) {
+                app.settings.updater.check_app = check_app;
+                app.mark_dirty();
+            }
+
+            ui.add_space(6.0);
+            theme::section_title(ui, &p, "yt-dlp");
+
             // --- current state ---------------------------------------------
             theme::card(ui, &p, |ui| {
                 ui.horizontal(|ui| {

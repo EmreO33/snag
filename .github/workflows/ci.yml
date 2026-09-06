@@ -46,6 +46,10 @@ jobs:
         working-directory: snag
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: test
+        working-directory: snag
+        run: cargo test
+
       - name: build
         working-directory: snag
         run: cargo build --release

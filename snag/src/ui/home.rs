@@ -7,11 +7,25 @@ use crate::settings::Mode;
 use crate::theme;
 use crate::util;
 
+/// yt-dlp keeps the canonical list, and it is far too long to mirror here.
+const SUPPORTED_SITES_URL: &str = "https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md";
+
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
     let logo = app.logo.clone();
     let full_width = ui.available_width();
     let box_width = full_width.min(660.0);
+
+    // Sits above everything else, the way cobalt does it.
+    ui.vertical_centered(|ui| {
+        if theme::pill(ui, &p, "+ supported services", false, true)
+            .on_hover_text(SUPPORTED_SITES_URL)
+            .clicked()
+        {
+            ui.ctx()
+                .open_url(egui::OpenUrl::new_tab(SUPPORTED_SITES_URL));
+        }
+    });
 
     ui.vertical_centered(|ui| {
         let top_gap = ((ui.available_height() - 420.0) * 0.32).max(10.0);
