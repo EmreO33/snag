@@ -244,7 +244,9 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                             "downloaded from github.com/yt-dlp/yt-dlp, the project's own release page. snag keeps it updated for you from the updates screen.",
                         );
 
-                        // --- ffmpeg, informational ------------------------
+                        // --- ffmpeg ---------------------------------------
+                        let plan = crate::installer::ffmpeg_plan();
+                        let ffmpeg_busy = app.setup.ffmpeg_install.busy();
                         theme::card(ui, &p, |ui| {
                             ui.horizontal(|ui| {
                                 match &app.setup.found_ffmpeg {
@@ -274,12 +276,81 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                         );
                                     }
                                 }
+
+                                if app.setup.found_ffmpeg.is_none() && !app.setup.detecting {
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| match &plan {
+                                            // Windows can do this without asking for
+                                            // elevation, so just do it.
+                                            crate::installer::FfmpegPlan::Automatic { .. } => {
+                                                let _ = ffmpeg_busy;
+                                                #[cfg(windows)]
+                                                if theme::action_button(
+                                                    ui,
+                                                    &p,
+                                                    "install ffmpeg",
+                                                    true,
+                                                    !ffmpeg_busy && !installing,
+                                                )
+                                                .clicked()
+                                                {
+                                                    app.start_ffmpeg_install(&ctx);
+                                                }
+                                            }
+                                            // Elsewhere it needs root, so hand over
+                                            // the command rather than asking for it.
+                                            crate::installer::FfmpegPlan::Manual { command } => {
+                                                if theme::pill(
+                                                    ui,
+                                                    &p,
+                                                    "copy the command",
+                                                    false,
+                                                    true,
+                                                )
+                                                .clicked()
+                                                {
+                                                    util::set_clipboard_text(command);
+                                                    app.toast("command copied", false);
+                                                }
+                                                ui.label(
+                                                    egui::RichText::new(command)
+                                                        .size(11.0)
+                                                        .color(p.dim),
+                                                );
+                                            }
+                                        },
+                                    );
+                                }
                             });
+
+                            if ffmpeg_busy {
+                                ui.add_space(10.0);
+                                theme::progress_bar(ui, &p, 0.0, true);
+                                ui.add_space(4.0);
+                                ui.label(
+                                    egui::RichText::new("installing through the package manager...")
+                                        .size(12.0)
+                                        .color(p.dim),
+                                );
+                            }
+                            if let InstallState::Failed(e) = &app.setup.ffmpeg_install {
+                                ui.add_space(8.0);
+                                let short: String = e.chars().take(200).collect();
+                                ui.label(egui::RichText::new(short).size(11.0).color(p.bad));
+                            }
                         });
                         theme::note_text(
                             ui,
                             &p,
-                            "ffmpeg merges video with audio and does every conversion. snag does not install it: get it from ffmpeg.org or your package manager, then point at it in settings > advanced if it is not on PATH.",
+                            match &plan {
+                                crate::installer::FfmpegPlan::Automatic { .. } => {
+                                    "ffmpeg merges video with audio and does every conversion. snag installs it through winget, which needs no admin rights, rather than hosting a build of its own."
+                                }
+                                crate::installer::FfmpegPlan::Manual { .. } => {
+                                    "ffmpeg merges video with audio and does every conversion. installing it needs root, which snag will not ask for: run the command above, then look again."
+                                }
+                            },
                         );
 
                         // --- finish ---------------------------------------

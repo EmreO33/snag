@@ -91,9 +91,10 @@ Snag asks three things once, then never again:
    downloads the current release from the yt-dlp project's own GitHub releases
    into `<config>/bin`.
 
-**Snag does not ship yt-dlp.** It is a separate project on its own release
-cadence, and a bundled copy would be stale the week after release. ffmpeg is
-also not installed by Snag: get it from ffmpeg.org or your package manager.
+**Snag ships neither yt-dlp nor ffmpeg**, and hosts no build of its own. yt-dlp
+comes from that project's GitHub releases; ffmpeg comes from your platform's
+package manager. Both stay on their own release cadence rather than going stale
+inside Snag.
 
 ## What it does
 
@@ -158,8 +159,10 @@ directory (`%APPDATA%\Snag` on Windows).
 
 - **yt-dlp** &mdash; on `PATH`, installed by Snag on first run, or pointed at in
   settings &gt; advanced
-- **ffmpeg** &mdash; on `PATH` (needed for merging, remuxing and audio conversion).
-  Snag does not install this one.
+- **ffmpeg** &mdash; needed for merging, remuxing and audio conversion. On
+  Windows, Snag installs it for you through winget (`Gyan.FFmpeg`), which needs
+  no admin rights. Elsewhere installing it needs root, which Snag will not ask
+  for, so it hands you the right command for your package manager instead.
 
 ## Build
 

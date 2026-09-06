@@ -236,14 +236,162 @@ pub fn detect(configured: &str) -> Option<(String, String)> {
     None
 }
 
+// --- ffmpeg -----------------------------------------------------------------
+//
+// ffmpeg is handled differently from yt-dlp. The project publishes no official
+// binaries, so rather than picking a third-party build on the user's behalf,
+// Snag defers to the platform's own package manager. On Windows that can be
+// driven from here without elevation; elsewhere it needs root, which a desktop
+// app has no business asking for, so the user is handed the exact command.
+
+/// The winget package: a versioned ffmpeg release, installed per-user.
+pub const FFMPEG_WINGET_ID: &str = "Gyan.FFmpeg";
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FfmpegPlan {
+    /// Snag can run this itself.
+    Automatic { command: String },
+    /// The user has to run it, usually because it needs root.
+    Manual { command: String },
+}
+
+/// The install command for whichever package manager this machine has.
+fn package_manager_command() -> String {
+    if cfg!(target_os = "macos") {
+        return "brew install ffmpeg".to_string();
+    }
+    for (tool, command) in [
+        ("apt-get", "sudo apt install ffmpeg"),
+        ("dnf", "sudo dnf install ffmpeg"),
+        ("pacman", "sudo pacman -S ffmpeg"),
+        ("zypper", "sudo zypper install ffmpeg"),
+        ("apk", "sudo apk add ffmpeg"),
+    ] {
+        if util::run_capture(tool, &["--version"]).is_ok() {
+            return command.to_string();
+        }
+    }
+    "sudo apt install ffmpeg".to_string()
+}
+
+/// How ffmpeg should be installed on this machine.
+///
+/// Written with `cfg!` rather than `#[cfg]` so every branch is compiled on
+/// every platform: both variants stay live, and a mistake in the one that does
+/// not apply here still fails the build.
+pub fn ffmpeg_plan() -> FfmpegPlan {
+    if cfg!(windows) {
+        FfmpegPlan::Automatic {
+            command: format!("winget install --id {FFMPEG_WINGET_ID}"),
+        }
+    } else {
+        FfmpegPlan::Manual {
+            command: package_manager_command(),
+        }
+    }
+}
+
+/// Install ffmpeg through winget. Windows only; elsewhere the plan is manual.
+#[cfg(windows)]
+pub fn install_ffmpeg(tx: Sender<InstallEvent>, repaint: impl Fn() + Send + 'static) {
+    std::thread::spawn(move || {
+        let _ = tx.send(InstallEvent::Log(format!(
+            "running:     winget install --id {FFMPEG_WINGET_ID}"
+        )));
+        // winget redraws its progress on one line, so there is nothing useful to
+        // turn into a percentage: show an indeterminate bar instead.
+        let _ = tx.send(InstallEvent::State(InstallState::Downloading {
+            got: 0,
+            total: 0,
+        }));
+        repaint();
+
+        let result = util::command("winget")
+            .args([
+                "install",
+                "--id",
+                FFMPEG_WINGET_ID,
+                "-e",
+                "--accept-package-agreements",
+                "--accept-source-agreements",
+                "--disable-interactivity",
+            ])
+            .output();
+
+        let output = match result {
+            Ok(o) => o,
+            Err(e) => {
+                let _ = tx.send(InstallEvent::State(InstallState::Failed(format!(
+                    "could not run winget: {e}. install ffmpeg yourself from ffmpeg.org."
+                ))));
+                repaint();
+                return;
+            }
+        };
+
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let tail: Vec<&str> = text
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        for line in tail.iter().rev().take(4).rev() {
+            let _ = tx.send(InstallEvent::Log((*line).to_string()));
+        }
+
+        let _ = tx.send(InstallEvent::State(InstallState::Verifying));
+        repaint();
+
+        let state = match detect_ffmpeg("") {
+            Some(version) => {
+                let _ = tx.send(InstallEvent::Log(format!("verified:    {version}")));
+                InstallState::Done {
+                    path: std::path::PathBuf::from("ffmpeg"),
+                    version,
+                }
+            }
+            None if output.status.success() => InstallState::Failed(
+                "winget reported success, but ffmpeg is still not on PATH. restarting snag usually picks it up."
+                    .into(),
+            ),
+            None => InstallState::Failed(
+                tail.last()
+                    .copied()
+                    .unwrap_or("winget could not install ffmpeg")
+                    .to_string(),
+            ),
+        };
+        let _ = tx.send(InstallEvent::State(state));
+        repaint();
+    });
+}
+
 /// Same idea for ffmpeg, which Snag needs but does not install.
 pub fn detect_ffmpeg(configured: &str) -> Option<String> {
     let configured = configured.trim();
-    let candidates = if configured.is_empty() {
-        vec!["ffmpeg".to_string()]
-    } else {
-        vec![configured.to_string(), "ffmpeg".to_string()]
-    };
+    let mut candidates = Vec::new();
+    if !configured.is_empty() {
+        candidates.push(configured.to_string());
+    }
+    candidates.push("ffmpeg".to_string());
+    #[cfg(windows)]
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        // A freshly winget-installed ffmpeg lands here, which our already
+        // running process may not have on PATH yet.
+        candidates.push(
+            std::path::PathBuf::from(local)
+                .join("Microsoft")
+                .join("WinGet")
+                .join("Links")
+                .join("ffmpeg.exe")
+                .display()
+                .to_string(),
+        );
+    }
 
     for bin in candidates {
         if let Ok(out) = util::run_capture(&bin, &["-version"]) {

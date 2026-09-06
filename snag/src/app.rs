@@ -69,6 +69,7 @@ pub struct SetupState {
     pub found_ytdlp: Option<(String, String)>,
     pub found_ffmpeg: Option<String>,
     pub install: InstallState,
+    pub ffmpeg_install: InstallState,
     pub log: Vec<String>,
     pub error: Option<String>,
 }
@@ -82,6 +83,7 @@ impl SetupState {
             found_ytdlp: None,
             found_ffmpeg: None,
             install: InstallState::Idle,
+            ffmpeg_install: InstallState::Idle,
             log: Vec::new(),
             error: None,
         }
@@ -104,6 +106,7 @@ pub enum SetupEvent {
         ffmpeg: Option<String>,
     },
     Install(InstallEvent),
+    FfmpegInstall(InstallEvent),
 }
 
 /// State for the remux screen, which runs at most one ffmpeg job at a time.
@@ -605,6 +608,25 @@ impl SnagApp {
         crate::installer::install(dir, itx, repaint);
     }
 
+    /// Install ffmpeg through the platform's package manager. Only available
+    /// where that can be done without asking for root.
+    #[cfg(windows)]
+    pub fn start_ffmpeg_install(&mut self, ctx: &egui::Context) {
+        if self.setup.ffmpeg_install.busy() {
+            return;
+        }
+        self.setup.error = None;
+
+        let (tx, repaint) = (self.setup_tx.clone(), Self::repainter(ctx));
+        let (itx, irx) = channel::<InstallEvent>();
+        std::thread::spawn(move || {
+            while let Ok(ev) = irx.recv() {
+                let _ = tx.send(SetupEvent::FfmpegInstall(ev));
+            }
+        });
+        crate::installer::install_ffmpeg(itx, repaint);
+    }
+
     fn drain_setup_events(&mut self) {
         while let Ok(ev) = self.setup_rx.try_recv() {
             match ev {
@@ -619,6 +641,18 @@ impl SnagApp {
                     self.setup.found_ffmpeg = ffmpeg;
                 }
                 SetupEvent::Install(InstallEvent::Log(l)) => self.setup.log.push(l),
+                SetupEvent::FfmpegInstall(InstallEvent::Log(l)) => self.setup.log.push(l),
+                SetupEvent::FfmpegInstall(InstallEvent::State(st)) => {
+                    if let InstallState::Failed(e) = &st {
+                        let short: String = e.chars().take(90).collect();
+                        self.toast(short, true);
+                    }
+                    if let InstallState::Done { version, .. } = &st {
+                        self.toast("ffmpeg installed", false);
+                        self.setup.found_ffmpeg = Some(version.clone());
+                    }
+                    self.setup.ffmpeg_install = st;
+                }
                 SetupEvent::Install(InstallEvent::State(st)) => {
                     if let InstallState::Failed(e) = &st {
                         let short: String = e.chars().take(90).collect();
