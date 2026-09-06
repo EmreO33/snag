@@ -48,7 +48,10 @@ OutputBaseFilename=Snag-{#AppVersion}-windows-setup
 SetupIconFile=..\..\assets\icon.ico
 LicenseFile=..\..\LICENSE
 UninstallDisplayIcon={app}\{#AppExe}
-UninstallDisplayName={#AppName} {#AppVersion}
+; Deliberately without the version: package managers correlate an installed
+; app across upgrades by its display name, so it has to stay stable. The
+; version is carried by DisplayVersion.
+UninstallDisplayName={#AppName}
 WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
