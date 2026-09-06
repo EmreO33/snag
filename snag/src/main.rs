@@ -115,6 +115,12 @@ fn startup_url() -> Option<String> {
     std::env::args().skip(1).find(|a| util::looks_like_url(a))
 }
 
+/// `snag <url> --download` starts it straight away rather than waiting to be
+/// told, which is what a browser integration or an "open with Snag" would want.
+fn startup_should_download() -> bool {
+    std::env::args().any(|a| a == "--download")
+}
+
 /// `snag --view=<name>` opens straight to a screen instead of the link box.
 fn startup_view() -> Option<app::View> {
     std::env::args()
@@ -159,6 +165,9 @@ fn main() -> eframe::Result<()> {
             let mut app = app::SnagApp::new(cc);
             if let Some(url) = startup_url() {
                 app.url_input = url;
+                if startup_should_download() {
+                    app.enqueue_current();
+                }
             }
             if let Some(v) = startup_view() {
                 app.view = v;

@@ -20,6 +20,34 @@ Snag is a front end for **yt-dlp**. It builds the yt-dlp command from your
 settings, runs it, and reads the progress back. Merging, remuxing and audio
 conversion are handled by **ffmpeg**, which yt-dlp calls on its own.
 
+<div align="center">
+
+![Snag checking a link before downloading it](assets/screenshots/save.png)
+
+*Paste a link and Snag tells you what it is, including the qualities the site
+actually offers.*
+
+</div>
+
+<table>
+<tr>
+<td width="50%"><img src="assets/screenshots/queue.png" alt="The download queue"></td>
+<td width="50%"><img src="assets/screenshots/history.png" alt="Download history"></td>
+</tr>
+<tr>
+<td align="center"><b>queue</b> &mdash; live progress, speed and ETA</td>
+<td align="center"><b>history</b> &mdash; remembered across restarts</td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/screenshots/remux.png" alt="Remuxing a local file"></td>
+<td width="50%"><img src="assets/screenshots/settings.png" alt="Settings"></td>
+</tr>
+<tr>
+<td align="center"><b>remux</b> &mdash; rewrap or convert what you already have</td>
+<td align="center"><b>settings</b> &mdash; every knob, in plain language</td>
+</tr>
+</table>
+
 > [!IMPORTANT]
 > **Only the Windows build has actually been tested so far.** The Linux and
 > macOS binaries compile in CI and are published on every release, but nobody
@@ -217,6 +245,7 @@ snag --install-ytdlp                 # install yt-dlp headlessly and exit
 snag --install-ytdlp /some/dir       # ...into a specific folder
 snag <link>                          # open with the link already in the box
 snag --notify-test                   # check whether desktop notifications work
+snag <link> --download               # queue it immediately, for browser integration
 ```
 
 `--print-command` prints one argument per line using the current settings, which
