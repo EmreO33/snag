@@ -5,15 +5,16 @@ one place a change gets written down. Every release gets an entry, and CI
 fails a version bump that arrives without one.
 
 A heading may also carry a name after the version, and that name becomes the
-release title on GitHub. That part is optional and only some releases want it.
+release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
+never on a patch. They are optional even then.
 
-## 1.2.2 - The Narcissistic Update
+## 1.2.2
 
 - The about screen says who made Snag, and links to their GitHub. It credited
   cobalt for the inspiration, yt-dlp for the work and the GPL for the terms,
   and never mentioned the author.
 
-## 1.2.1 - The Fine Print
+## 1.2.1
 
 - The YouTube sign-in screen now says what using it costs you, before you pick
   a browser rather than after: downloading from YouTube is against their terms

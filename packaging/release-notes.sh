@@ -14,8 +14,10 @@
 # rather than merely intended: CI runs it against the version in Cargo.toml,
 # so a bump without a note fails long before anything is tagged.
 #
-# A name after the version in the heading is optional, and only some releases
-# want one. A changelog entry is not optional.
+# A name after the version in the heading is optional and belongs only on a
+# feature release, an x.y.0. Patch releases carry the bare version, so the
+# names stay rare enough to be worth reading. A changelog entry is not
+# optional anywhere.
 
 set -euo pipefail
 
@@ -50,11 +52,16 @@ entries() {
     ' "$CHANGELOG"
 }
 
+# The part of the heading after the version, if a name was given at all.
+name_of_heading() {
+    heading | sed -E "s/^## ${ESCAPED} *-? *//"
+}
+
 case "$WHAT" in
 title)
     # "## 1.2.2 - The Narcissistic Update" gives "v1.2.2: The Narcissistic
     # Update". A heading with no name after it just gives the tag.
-    name="$(heading | sed -E "s/^## ${ESCAPED} *-? *//")"
+    name="$(name_of_heading)"
     if [ -n "$name" ]; then
         echo "$TAG: $name"
     else
@@ -104,6 +111,21 @@ GUIDE
     ;;
 
 check)
+    # A name on a patch release is a mistake rather than a preference, so it
+    # fails here rather than quietly publishing as "v1.2.2: Some Joke".
+    case "$VERSION" in
+    *.*.0)
+        ;;
+    *)
+        if [ -n "$(name_of_heading)" ]; then
+            echo "$VERSION is a patch release and should not carry a name." >&2
+            echo "names belong on feature releases (x.y.0) only." >&2
+            echo "change the heading to just '## $VERSION'." >&2
+            exit 1
+        fi
+        ;;
+    esac
+
     if [ -z "$(entries | tr -d '[:space:]')" ]; then
         echo "no changelog entry for $VERSION." >&2
         echo "add a '## $VERSION' section to CHANGELOG.md saying what changed." >&2
