@@ -8,10 +8,14 @@
 #
 #   release-notes.sh <tag> title   the release's name
 #   release-notes.sh <tag> body    the release's body, as markdown
+#   release-notes.sh <tag> check   fails if the changelog has nothing to say
 #
-# A version with no entry in the changelog still publishes: the title falls
-# back to the bare tag and the body to the download guide alone. A release
-# should never fail over a missing note.
+# Every release gets a changelog entry, and `check` is what makes that true
+# rather than merely intended: CI runs it against the version in Cargo.toml,
+# so a bump without a note fails long before anything is tagged.
+#
+# A name after the version in the heading is optional, and only some releases
+# want one. A changelog entry is not optional.
 
 set -euo pipefail
 
@@ -99,8 +103,18 @@ required separately and is not installed by Snag.
 GUIDE
     ;;
 
+check)
+    if [ -z "$(entries | tr -d '[:space:]')" ]; then
+        echo "no changelog entry for $VERSION." >&2
+        echo "add a '## $VERSION' section to CHANGELOG.md saying what changed." >&2
+        echo "a name after the version is optional: '## $VERSION - Some Joke'." >&2
+        exit 1
+    fi
+    echo "changelog entry for $VERSION is present"
+    ;;
+
 *)
-    echo "unknown output '$WHAT': expected title or body" >&2
+    echo "unknown output '$WHAT': expected title, body or check" >&2
     exit 2
     ;;
 esac

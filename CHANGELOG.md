@@ -1,8 +1,11 @@
 # Changelog
 
 Each release's notes are taken from here automatically, so this file is the
-one place a change gets written down. A heading may carry a name after the
-version, and that name becomes the release title on GitHub.
+one place a change gets written down. Every release gets an entry, and CI
+fails a version bump that arrives without one.
+
+A heading may also carry a name after the version, and that name becomes the
+release title on GitHub. That part is optional and only some releases want it.
 
 ## 1.2.2 - The Narcissistic Update
 

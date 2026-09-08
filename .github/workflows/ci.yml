@@ -10,6 +10,18 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Every release gets a changelog entry, so a version bump without one is a
+  # mistake worth catching here rather than at the moment of publishing.
+  changelog:
+    name: changelog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: the version being built has a changelog entry
+        run: |
+          version="$(grep -m1 '^version = ' snag/Cargo.toml | cut -d'"' -f2)"
+          bash packaging/release-notes.sh "v$version" check
+
   check:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

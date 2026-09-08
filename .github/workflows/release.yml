@@ -197,6 +197,8 @@ jobs:
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          # A backstop for the CI check: nothing gets published without a note.
+          bash packaging/release-notes.sh "$TAG" check
           bash packaging/release-notes.sh "$TAG" body > release-body.md
           {
             echo "title=$(bash packaging/release-notes.sh "$TAG" title)"
