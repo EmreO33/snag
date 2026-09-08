@@ -165,6 +165,14 @@ The session is scoped to YouTube links by default, so it is never offered to
 other sites you download from. That scope can be turned off if you need cookies
 elsewhere.
 
+Worth knowing before you use it: downloading from YouTube is against YouTube's
+terms whether you are signed in or not, and signing in ties that activity to
+your account in a way that downloading without it does not. YouTube can answer
+with bot checks, with throttling, and in rare cases by closing the account. Use
+a second Google account for this rather than your main one. An exported
+`cookies.txt` is as good as your password, so keep it out of shared folders and
+out of repositories. Snag says all of this on the screen itself as well.
+
 On Windows, the Chromium browsers (Chrome, Edge, Brave, Opera, Vivaldi) now
 encrypt their cookie store so that only the browser itself can read it, and no
 external tool can undo that. **Firefox is the one that reliably works.** The

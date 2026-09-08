@@ -636,6 +636,28 @@ fn youtube(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         );
     });
 
+    // Said before the browser is picked, because that is the moment the
+    // decision is made. Every tool in this space works this way, but a user
+    // should hear what it costs from us rather than from a locked account.
+    theme::section_title(ui, &p, "before you sign in");
+    theme::card(ui, &p, |ui| {
+        ui.label(
+            egui::RichText::new(
+                "downloading from youtube is against youtube's terms, signed in or not.",
+            )
+            .size(13.0)
+            .color(p.warn),
+        );
+        ui.add_space(6.0);
+        for line in [
+            "signing in ties that activity to your account, which downloading without it does not. youtube can answer with bot checks, with throttling, and in rare cases by closing the account. use a second google account for this rather than the one your email and everything else sits on.",
+            "a cookie file is as good as your password. anyone who has a copy is signed in as you, without needing your login or a two-factor code. keep it out of shared folders and out of repositories.",
+        ] {
+            ui.label(egui::RichText::new(line).size(12.0).color(p.dim));
+            ui.add_space(6.0);
+        }
+    });
+
     theme::section_title(ui, &p, "browser to borrow the session from");
     let before = app.settings.network.cookies_from_browser;
     changed |= theme::pill_group(
