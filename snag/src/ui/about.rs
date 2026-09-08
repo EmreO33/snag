@@ -5,6 +5,9 @@ use crate::settings::Settings;
 use crate::theme;
 use crate::util;
 
+/// The author's github, linked from the byline.
+const AUTHOR_URL: &str = "https://github.com/EmreO33";
+
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
     let logo = app.logo.clone();
@@ -29,6 +32,20 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                         .size(13.0)
                         .color(p.dim),
                 );
+                ui.add_space(6.0);
+                // ui.link rather than a plain label, so it underlines on hover
+                // and takes the pointing cursor without hand-rolling either.
+                if ui
+                    .link(
+                        egui::RichText::new("made by EmreO33")
+                            .size(12.0)
+                            .color(p.accent),
+                    )
+                    .on_hover_text(AUTHOR_URL)
+                    .clicked()
+                {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(AUTHOR_URL));
+                }
             });
 
             ui.add_space(24.0);
