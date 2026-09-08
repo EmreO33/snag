@@ -174,52 +174,45 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The notes come out of CHANGELOG.md in the repo, so the tree has to be
+      # here alongside the artifacts.
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+          path: dist
 
       - name: list what will be published
-        run: ls -la
+        run: ls -la dist
 
       # Published so tooling can verify a download without fetching it twice:
       # the Scoop manifest reads its hashes straight out of this file.
       - name: write checksums
+        working-directory: dist
         run: sha256sum Snag-* snag-* | tee SHA256SUMS.txt
+
+      - name: build the release notes
+        id: notes
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          bash packaging/release-notes.sh "$TAG" body > release-body.md
+          {
+            echo "title=$(bash packaging/release-notes.sh "$TAG" title)"
+          } >> "$GITHUB_OUTPUT"
+          echo "--- release page will read: ---"
+          cat release-body.md
 
       - name: publish the release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ steps.notes.outputs.title }}
           draft: false
           generate_release_notes: true
+          body_path: release-body.md
           files: |
-            Snag-*
-            snag-*
-            SHA256SUMS.txt
-          body: |
-            ## Windows
-
-            - **`Snag-*-windows-setup.exe`** — installer. Installs for you or for
-              all users, adds a Start Menu entry, and uninstalls cleanly.
-            - **`Snag-*-windows-portable.zip`** — portable. Unzip and run; it
-              keeps everything in a `data` folder beside the executable and
-              writes nothing else to the machine.
-            - **`snag-windows-x86_64.exe`** — the bare executable.
-
-            ## Linux
-
-            - **`Snag-*-x86_64.AppImage`** — the recommended Linux build. Runs on
-              any distro with glibc 2.35 or newer, and integrates with your
-              application menu. `chmod +x` it and run it.
-            - **`snag-linux-x86_64`** — the bare binary. Needs glibc 2.39+.
-
-            ## macOS
-
-            `snag-macos-aarch64`, a bare binary. Builds in CI but has not been run
-            by anyone yet, so treat it as untested.
-
-            ---
-
-            Snag does not ship yt-dlp. On first launch it offers to download the
-            current yt-dlp release from the yt-dlp project's own GitHub releases.
-            ffmpeg is required separately and is not installed by Snag.
+            dist/Snag-*
+            dist/snag-*
+            dist/SHA256SUMS.txt
