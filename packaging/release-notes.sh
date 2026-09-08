@@ -113,8 +113,12 @@ GUIDE
 check)
     # A name on a patch release is a mistake rather than a preference, so it
     # fails here rather than quietly publishing as "v1.2.2: Some Joke".
+    #
+    # 1.2.2 keeps its name because it had one before the rule existed and its
+    # owner wants it kept. It is the only exception and new ones need asking
+    # for, not adding.
     case "$VERSION" in
-    *.*.0)
+    *.*.0 | 1.2.2)
         ;;
     *)
         if [ -n "$(name_of_heading)" ]; then

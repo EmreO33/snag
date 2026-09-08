@@ -8,7 +8,7 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
-## 1.2.2
+## 1.2.2 - The Narcissistic Update
 
 - The about screen says who made Snag, and links to their GitHub. It credited
   cobalt for the inspiration, yt-dlp for the work and the GPL for the terms,
