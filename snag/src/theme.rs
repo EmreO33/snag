@@ -165,6 +165,28 @@ pub fn apply(ctx: &egui::Context, p: &Palette, scale: f32) {
 // --- widgets ---------------------------------------------------------------
 
 /// One pill. Selected pills invert: accent fill, accent-appropriate text.
+/// Tell a screen reader what a hand painted widget is.
+///
+/// egui works this out for itself from the text of its own widgets, but these
+/// are rectangles and glyphs drawn straight onto the canvas, so without this
+/// they reach assistive software as unlabelled shapes.
+fn announce(response: &Response, kind: egui::WidgetType, enabled: bool, label: &str) {
+    let label = label.to_string();
+    response.widget_info(|| egui::WidgetInfo::labeled(kind, enabled, label.clone()));
+}
+
+/// The same, for something that is either on or off.
+fn announce_selected(
+    response: &Response,
+    kind: egui::WidgetType,
+    enabled: bool,
+    selected: bool,
+    label: &str,
+) {
+    let label = label.to_string();
+    response.widget_info(|| egui::WidgetInfo::selected(kind, enabled, selected, label.clone()));
+}
+
 pub fn pill(ui: &mut Ui, p: &Palette, text: &str, selected: bool, enabled: bool) -> Response {
     let font = FontId::new(14.0, FontFamily::Monospace);
     let galley = ui.painter().layout_no_wrap(
@@ -203,6 +225,8 @@ pub fn pill(ui: &mut Ui, p: &Palette, text: &str, selected: bool, enabled: bool)
         let pos = rect.center() - galley.size() * 0.5;
         ui.painter().galley(pos, galley, text_color);
     }
+
+    announce_selected(&response, egui::WidgetType::Button, enabled, selected, text);
 
     if enabled {
         response.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -285,6 +309,8 @@ pub fn action_button(
             .text(rect.center(), egui::Align2::CENTER_CENTER, text, font, fg);
     }
 
+    announce(&response, egui::WidgetType::Button, enabled, text);
+
     if enabled {
         response.on_hover_cursor(egui::CursorIcon::PointingHand)
     } else {
@@ -320,6 +346,8 @@ pub fn toggle(ui: &mut Ui, p: &Palette, on: &mut bool) -> Response {
         );
     }
 
+    announce_selected(&response, egui::WidgetType::Checkbox, true, *on, "");
+
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
@@ -334,7 +362,11 @@ pub fn toggle_row(ui: &mut Ui, p: &Palette, title: &str, note: &str, on: &mut bo
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(title).color(p.text));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if toggle(ui, p, on).changed() {
+                    // The switch itself carries no text, so the row's title is
+                    // the only thing that can name it out loud.
+                    let switch = toggle(ui, p, on);
+                    announce_selected(&switch, egui::WidgetType::Checkbox, true, *on, title);
+                    if switch.changed() {
                         changed = true;
                     }
                 });

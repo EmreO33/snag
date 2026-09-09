@@ -26,6 +26,21 @@ fn nav_item(
     let width = ui.available_width();
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 34.0), Sense::click());
 
+    // Painted by hand, so it has to introduce itself. The badge belongs in the
+    // name: "queue, 3" is the entire point of the badge being there.
+    let spoken = match &badge {
+        Some(b) => format!("{label}, {b}"),
+        None => label.to_string(),
+    };
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            true,
+            selected,
+            spoken.clone(),
+        )
+    });
+
     if ui.is_rect_visible(rect) {
         let hovered = response.hovered();
         let fill = if selected {
@@ -217,6 +232,11 @@ pub fn page_header(ui: &mut egui::Ui, p: &Palette, title: &str, subtitle: &str) 
 }
 
 /// A single-line text field styled to match the rest of the surface.
+/// A text box, named by `hint` for anything reading the screen aloud.
+///
+/// egui gives a text edit no name of its own, so without this a screen reader
+/// announces an empty edit box and leaves you to guess what belongs in it.
+/// The hint is already the plain description of what goes here.
 pub fn text_field(
     ui: &mut egui::Ui,
     p: &Palette,
@@ -241,6 +261,14 @@ pub fn text_field(
     ui.visuals_mut().widgets.active.rounding = Rounding::same(10.0);
     let r = ui.add(edit);
     *ui.visuals_mut() = before;
+
+    let (name, spoken) = (hint.to_string(), value.clone());
+    r.widget_info(|| {
+        let mut info = egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, name.clone());
+        // Keep what is typed as the value, so it is read back as well as named.
+        info.current_text_value = Some(spoken.clone());
+        info
+    });
     r
 }
 
@@ -257,7 +285,17 @@ pub fn field_row(
         ui.label(egui::RichText::new(label).size(13.0).color(p.dim));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let w = (ui.available_width() - 8.0).clamp(120.0, 360.0);
-            if text_field(ui, p, value, hint, w).changed() {
+            // Named by the row's own label rather than the hint: "subtitle
+            // languages" says more than "en,en-orig".
+            let field = text_field(ui, p, value, hint, w);
+            let spoken = (label.to_string(), value.clone());
+            field.widget_info(|| {
+                let mut info =
+                    egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, spoken.0.clone());
+                info.current_text_value = Some(spoken.1.clone());
+                info
+            });
+            if field.changed() {
                 changed = true;
             }
         });

@@ -68,6 +68,19 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                 .desired_width(ui.available_width() - 8.0)
                                 .margin(egui::Margin::symmetric(6.0, 10.0));
                             let r = ui.add(edit);
+                            // The one box that matters most, and egui gives a
+                            // text edit no name of its own, so a screen reader
+                            // would otherwise land on an unlabelled field.
+                            let typed = app.url_input.clone();
+                            r.widget_info(|| {
+                                let mut info = egui::WidgetInfo::labeled(
+                                    egui::WidgetType::TextEdit,
+                                    true,
+                                    "link",
+                                );
+                                info.current_text_value = Some(typed.clone());
+                                info
+                            });
                             if r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
                                 submit = true;
                             }

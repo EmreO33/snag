@@ -8,6 +8,23 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.4.0
+
+- **Screen reader support.** Snag was invisible to assistive software, and is
+  not any more. Two things were wrong. The accessibility integration had been
+  switched off along with everything else when eframe's default features were
+  disabled to keep the binary small, which is a poor trade against being
+  unusable. And Snag draws its own buttons, pills, switches and navigation
+  straight onto the canvas rather than using egui's stock widgets, so even with
+  the integration on they would have arrived as unlabelled shapes.
+  - Every control now says what it is, whether it is on, and what it is called.
+    The queue badge is part of the name, so it reads as "queue, 3".
+  - Text boxes are named too. The link box announces itself as "link", and a
+    settings field takes the name of its row rather than its placeholder.
+  - Checked against the Windows UI Automation interface that screen readers
+    actually consume, rather than assumed from the code.
+  - Costs about 230 KB of binary.
+
 ## 1.3.0 - Snip Snip
 
 - **Clip a section.** After a download finishes, a clip button on the queue and

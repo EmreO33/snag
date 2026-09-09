@@ -229,6 +229,10 @@ the release's published `SHA256SUMS.txt` and thrown away on a mismatch.
 Settings are saved automatically to `settings.json` in the platform config
 directory (`%APPDATA%\Snag` on Windows).
 
+**accessibility** &mdash; Snag reports itself to screen readers. Every control
+says what it is, what it is called and whether it is on, including the ones
+Snag paints itself, and text boxes are named by what belongs in them.
+
 ## Requirements
 
 - **yt-dlp** &mdash; on `PATH`, installed by Snag on first run, or pointed at in
