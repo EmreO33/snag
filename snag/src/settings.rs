@@ -324,8 +324,15 @@ pub struct MetadataSettings {
     pub embed_thumbnail: bool,
     pub embed_chapters: bool,
     pub embed_subtitles: bool,
+    /// Save subtitles next to the media file as well.
+    pub write_subtitle_files: bool,
+    /// Let a site's machine transcript count as a subtitle. Most videos have
+    /// nothing else, so without this both of the above usually find nothing.
+    pub include_auto_subs: bool,
     pub subtitle_languages: String,
     pub write_thumbnail_file: bool,
+    /// Write one file per chapter alongside the whole thing.
+    pub split_chapters: bool,
     pub sponsorblock_remove: bool,
     pub keep_original_date: bool,
 }
@@ -337,8 +344,11 @@ impl Default for MetadataSettings {
             embed_thumbnail: true,
             embed_chapters: false,
             embed_subtitles: false,
+            write_subtitle_files: false,
+            include_auto_subs: true,
             subtitle_languages: "en".into(),
             write_thumbnail_file: false,
+            split_chapters: false,
             sponsorblock_remove: false,
             keep_original_date: false,
         }

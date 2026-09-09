@@ -333,7 +333,38 @@ fn metadata(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         &mut m.embed_subtitles,
     );
 
-    if m.embed_subtitles {
+    theme::section_title(ui, &p, "extra files");
+    changed |= theme::toggle_row(
+        ui,
+        &p,
+        "save thumbnail separately",
+        "writes the thumbnail next to the media file as its own image.",
+        &mut m.write_thumbnail_file,
+    );
+    changed |= theme::toggle_row(
+        ui,
+        &p,
+        "save subtitles as files",
+        "writes subtitles next to the media file as .srt, which every player takes. works in audio mode too.",
+        &mut m.write_subtitle_files,
+    );
+    changed |= theme::toggle_row(
+        ui,
+        &p,
+        "split into chapters",
+        "writes one file per chapter as well as the whole thing. videos without chapters are downloaded as usual. needs ffmpeg.",
+        &mut m.split_chapters,
+    );
+
+    if m.embed_subtitles || m.write_subtitle_files {
+        theme::section_title(ui, &p, "subtitles");
+        changed |= theme::toggle_row(
+            ui,
+            &p,
+            "include automatic captions",
+            "counts a site's machine transcript as a subtitle. most videos have no hand written ones, so with this off you will usually get nothing.",
+            &mut m.include_auto_subs,
+        );
         theme::card(ui, &p, |ui| {
             changed |= super::field_row(
                 ui,
@@ -349,15 +380,6 @@ fn metadata(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
             "comma separated. use all for every available track.",
         );
     }
-
-    theme::section_title(ui, &p, "extra files");
-    changed |= theme::toggle_row(
-        ui,
-        &p,
-        "save thumbnail separately",
-        "writes the thumbnail next to the media file as its own image.",
-        &mut m.write_thumbnail_file,
-    );
 
     theme::section_title(ui, &p, "sponsorblock");
     changed |= theme::toggle_row(

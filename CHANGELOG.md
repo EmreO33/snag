@@ -42,6 +42,18 @@ never on a patch. They are optional even then.
   of starting the file again. Finished, failed and cancelled downloads are not
   remembered, since those were answered already.
 
+- **Split into chapters.** A video with chapters can be written out as one
+  file per chapter alongside the whole thing, under settings > metadata. A
+  video without chapters downloads exactly as before. Needs ffmpeg.
+
+- **Subtitles as files.** Subtitles can now be saved next to the media file
+  rather than only embedded in it, as `.srt` since that is what every player
+  takes. It works in audio mode too, where embedding does not.
+  - Both this and the existing embed option now have an **include automatic
+    captions** switch, on by default. Without it a site's machine transcript
+    does not count as a subtitle, and since most videos have no hand written
+    ones, embedding subtitles has until now quietly produced nothing on them.
+
 ## 1.2.2 - The Narcissistic Update
 
 - The about screen says who made Snag, and links to their GitHub. It credited

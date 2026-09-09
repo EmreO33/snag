@@ -270,8 +270,22 @@ pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) 
     if m.embed_chapters {
         push(&mut a, "--embed-chapters");
     }
-    if m.embed_subtitles && mode != Mode::Audio {
+    // Subtitles can be wanted in the file, beside it, or both, and the
+    // language list and the automatic-caption switch apply to whichever.
+    let embed_subs = m.embed_subtitles && mode != Mode::Audio;
+    if embed_subs {
         push(&mut a, "--embed-subs");
+    }
+    if m.write_subtitle_files {
+        push(&mut a, "--write-subs");
+        // Sites hand these over as vtt; srt is the one every player takes.
+        push(&mut a, "--convert-subs");
+        push(&mut a, "srt");
+    }
+    if embed_subs || m.write_subtitle_files {
+        if m.include_auto_subs {
+            push(&mut a, "--write-auto-subs");
+        }
         push(&mut a, "--sub-langs");
         a.push(if m.subtitle_languages.trim().is_empty() {
             "en".into()
@@ -281,6 +295,9 @@ pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) 
     }
     if m.write_thumbnail_file {
         push(&mut a, "--write-thumbnail");
+    }
+    if m.split_chapters {
+        push(&mut a, "--split-chapters");
     }
     if m.sponsorblock_remove {
         push(&mut a, "--sponsorblock-remove");
