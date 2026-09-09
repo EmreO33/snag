@@ -8,10 +8,9 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
-## 1.4.0
+## 1.3.1
 
-- **Screen reader support.** Snag was invisible to assistive software, and is
-  not any more. Two things were wrong. The accessibility integration had been
+- **Fixed: Snag was invisible to screen readers.** Two things were wrong. The accessibility integration had been
   switched off along with everything else when eframe's default features were
   disabled to keep the binary small, which is a poor trade against being
   unusable. And Snag draws its own buttons, pills, switches and navigation
