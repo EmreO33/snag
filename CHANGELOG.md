@@ -34,6 +34,14 @@ never on a patch. They are optional even then.
   box still means an ordinary paste. They are listed on the about screen,
   since a shortcut nobody knows about is not a feature.
 
+- **The queue survives a restart.** Downloads that had not finished are
+  remembered, so closing Snag mid-download no longer throws the work away.
+  They come back marked interrupted rather than running: reopening Snag is not
+  the same as asking it to download, so there is a "resume all" button and a
+  retry on each one. Resuming carries on from what is already on disk instead
+  of starting the file again. Finished, failed and cancelled downloads are not
+  remembered, since those were answered already.
+
 ## 1.2.2 - The Narcissistic Update
 
 - The about screen says who made Snag, and links to their GitHub. It credited

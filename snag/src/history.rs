@@ -1,8 +1,8 @@
 //! What Snag has downloaded, remembered across runs.
 //!
-//! The queue is deliberately in-memory: it is about what is happening now.
-//! History is the opposite, and is the thing you go looking for a week later
-//! when you want that file again, or the link it came from.
+//! The queue remembers what has not happened yet; this remembers what has.
+//! History is the thing you go looking for a week later when you want that
+//! file again, or the link it came from.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

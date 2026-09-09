@@ -238,6 +238,9 @@ pub struct SnagApp {
     pub jobs: Vec<Job>,
     job_tx: Sender<JobEvent>,
     job_rx: Receiver<JobEvent>,
+    /// The queue as last written to disk, so it is only rewritten when what
+    /// would be written has actually changed.
+    saved_queue: Vec<crate::jobs::Saved>,
 
     pub remux: RemuxUi,
     remux_tx: Sender<RemuxEvent>,
@@ -288,6 +291,12 @@ impl SnagApp {
         let (signin_tx, signin_rx) = channel();
         let needs_setup = !settings.setup_done;
 
+        // Downloads that were still going last time come back waiting rather
+        // than running. Snag does not start work you have not asked for, and
+        // reopening it is not the same as asking.
+        let saved_queue = crate::jobs::load_queue();
+        let restored: Vec<Job> = saved_queue.iter().cloned().map(Job::restored).collect();
+
         let logo = crate::icon::mark_image().map(|image| {
             cc.egui_ctx
                 .load_texture("snag_logo", image, egui::TextureOptions::LINEAR)
@@ -323,9 +332,10 @@ impl SnagApp {
             clip_rx,
             clip_tx,
             offered_link: None,
-            jobs: Vec::new(),
+            jobs: restored,
             job_tx,
             job_rx,
+            saved_queue,
             remux: RemuxUi::default(),
             remux_tx,
             remux_rx,
@@ -568,6 +578,23 @@ impl SnagApp {
     }
 
     /// Start queued jobs while we are under the concurrency limit.
+    /// Write the outstanding queue out when it has changed.
+    ///
+    /// Compared against what was last written rather than saved on every
+    /// frame: the queue changes a handful of times a minute at most, and
+    /// progress is not part of what gets stored.
+    fn persist_queue(&mut self) {
+        let current = crate::jobs::to_save(&self.jobs);
+        if current == self.saved_queue {
+            return;
+        }
+        // A failure is not reported: it would be reported every frame, and the
+        // next change tries again anyway.
+        if crate::jobs::save_queue(&current).is_ok() {
+            self.saved_queue = current;
+        }
+    }
+
     fn pump_queue(&mut self, ctx: &egui::Context) {
         let limit = self.settings.processing.max_concurrent_jobs.max(1);
         let mut running = self.active_job_count();
@@ -1349,6 +1376,7 @@ impl eframe::App for SnagApp {
         self.drain_signin_events();
         self.drain_setup_events();
         self.pump_queue(ctx);
+        self.persist_queue();
         self.pump_probe(ctx);
         self.pump_filmstrip(ctx);
         self.track_window();

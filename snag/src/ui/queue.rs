@@ -7,6 +7,7 @@ use crate::util;
 
 enum Action {
     Cancel(u64),
+    ResumeAll,
     Retry(u64),
     Remove(u64),
     ToggleLog(u64),
@@ -23,9 +24,16 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         super::page_header(ui, &p, "queue", "");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            let has_finished = app.jobs.iter().any(|j| j.state.is_terminal());
+            // Interrupted jobs are terminal in the sense that nothing is
+            // happening to them, but they are not finished, and clearing
+            // finished work should not quietly throw them away.
+            let has_finished = app
+                .jobs
+                .iter()
+                .any(|j| j.state.is_terminal() && !j.state.is_resumable());
             if theme::action_button(ui, &p, "clear finished", false, has_finished).clicked() {
-                app.jobs.retain(|j| !j.state.is_terminal());
+                app.jobs
+                    .retain(|j| !j.state.is_terminal() || j.state.is_resumable());
             }
             let has_active = app.jobs.iter().any(|j| !j.state.is_terminal());
             if theme::action_button(ui, &p, "cancel all", false, has_active).clicked() {
@@ -59,6 +67,41 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
     let mut actions: Vec<Action> = Vec::new();
 
+    let interrupted = app.jobs.iter().filter(|j| j.state.is_resumable()).count();
+    if interrupted > 0 {
+        theme::card(ui, &p, |ui| {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new(if interrupted == 1 {
+                            "1 download was still going when snag last closed".to_string()
+                        } else {
+                            format!(
+                                "{interrupted} downloads were still going when snag last closed"
+                            )
+                        })
+                        .size(13.0)
+                        .color(p.text),
+                    );
+                    ui.add_space(2.0);
+                    ui.label(
+                        egui::RichText::new(
+                            "nothing was lost. picking one up carries on from where it stopped.",
+                        )
+                        .size(12.0)
+                        .color(p.dim),
+                    );
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if theme::action_button(ui, &p, "resume all", true, true).clicked() {
+                        actions.push(Action::ResumeAll);
+                    }
+                });
+            });
+        });
+        ui.add_space(10.0);
+    }
+
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .id_salt("queue_scroll")
@@ -79,16 +122,14 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                     }
                 }
             }
+            Action::ResumeAll => {
+                for j in app.jobs.iter_mut().filter(|j| j.state.is_resumable()) {
+                    j.restart();
+                }
+            }
             Action::Retry(id) => {
                 if let Some(j) = app.jobs.iter_mut().find(|j| j.id == id) {
-                    j.cancel_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-                    j.state = JobState::Queued;
-                    j.downloaded = 0.0;
-                    j.total = 0.0;
-                    j.speed = 0.0;
-                    j.eta = -1.0;
-                    j.file = None;
-                    j.log.clear();
+                    j.restart();
                 }
             }
             Action::Remove(id) => {

@@ -1,6 +1,7 @@
 //! The download queue: one OS thread per running job, talking back to the UI
 //! over a channel. Jobs are killable and never block the render loop.
 
+use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
@@ -27,14 +28,24 @@ pub enum JobState {
     Done,
     Failed(String),
     Cancelled,
+    /// Was still going when Snag last closed. Nothing is lost: yt-dlp picks a
+    /// part-finished download back up where it stopped.
+    Interrupted,
 }
 
 impl JobState {
+    /// Nothing more will happen to this job unless you ask.
     pub fn is_terminal(&self) -> bool {
         matches!(
             self,
-            JobState::Done | JobState::Failed(_) | JobState::Cancelled
+            JobState::Done | JobState::Failed(_) | JobState::Cancelled | JobState::Interrupted
         )
+    }
+
+    /// Stopped, but through no decision of the user's, so it is work waiting
+    /// rather than work finished with.
+    pub fn is_resumable(&self) -> bool {
+        matches!(self, JobState::Interrupted)
     }
     pub fn is_active(&self) -> bool {
         matches!(
@@ -51,6 +62,7 @@ impl JobState {
             JobState::Done => "done",
             JobState::Failed(_) => "failed",
             JobState::Cancelled => "cancelled",
+            JobState::Interrupted => "interrupted",
         }
     }
 }
@@ -93,7 +105,8 @@ pub struct Job {
 }
 
 /// Choices that apply to one download rather than to every download.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct JobOverrides {
     /// Take the whole playlist rather than just the linked item.
     pub whole_playlist: bool,
@@ -120,6 +133,18 @@ impl Job {
             child: Arc::new(Mutex::new(None)),
             cancel_flag: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Put a stopped job back in the queue, as if it had just been added.
+    pub fn restart(&mut self) {
+        self.cancel_flag = Arc::new(AtomicBool::new(false));
+        self.state = JobState::Queued;
+        self.downloaded = 0.0;
+        self.total = 0.0;
+        self.speed = 0.0;
+        self.eta = -1.0;
+        self.file = None;
+        self.log.clear();
     }
 
     pub fn fraction(&self) -> f32 {
@@ -305,4 +330,117 @@ pub fn spawn(
         let _ = tx.send(JobEvent::State(id, final_state));
         repaint();
     });
+}
+
+/// A queue entry as it survives a restart.
+///
+/// Only what is needed to start the download again: progress is not worth
+/// keeping, since yt-dlp works out for itself how much of a part-finished file
+/// is already on disk.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Saved {
+    pub url: String,
+    pub mode: Mode,
+    #[serde(default)]
+    pub overrides: JobOverrides,
+    #[serde(default)]
+    pub title: String,
+}
+
+fn queue_path() -> PathBuf {
+    Settings::config_dir().join("queue.json")
+}
+
+/// The jobs worth writing down: the ones that had not finished.
+///
+/// A download that is done is in history, and one that failed or was cancelled
+/// was answered already. What survives a restart is work still outstanding.
+pub fn to_save(jobs: &[Job]) -> Vec<Saved> {
+    jobs.iter()
+        .filter(|j| !j.state.is_terminal() || j.state.is_resumable())
+        .map(|j| Saved {
+            url: j.url.clone(),
+            mode: j.mode,
+            overrides: j.overrides,
+            title: j.title.clone(),
+        })
+        .collect()
+}
+
+/// Read back what was outstanding. An unreadable file is treated as an empty
+/// queue: it is not worth refusing to start over.
+pub fn load_queue() -> Vec<Saved> {
+    std::fs::read_to_string(queue_path())
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_queue(saved: &[Saved]) -> Result<(), String> {
+    let path = queue_path();
+    if saved.is_empty() {
+        // Nothing outstanding means no file, rather than a file saying so.
+        if path.exists() {
+            let _ = std::fs::remove_file(&path);
+        }
+        return Ok(());
+    }
+    std::fs::create_dir_all(Settings::config_dir()).map_err(|e| e.to_string())?;
+    let raw = serde_json::to_string_pretty(saved).map_err(|e| e.to_string())?;
+    std::fs::write(path, raw).map_err(|e| e.to_string())
+}
+
+impl Job {
+    /// Rebuild a job that outlived the run that made it.
+    pub fn restored(saved: Saved) -> Self {
+        let mut job = Job::new(saved.url, saved.mode, saved.overrides);
+        job.title = saved.title;
+        job.state = JobState::Interrupted;
+        job
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_unfinished_work_is_written_down() {
+        let mut jobs = vec![
+            Job::new("a".into(), Mode::Auto, JobOverrides::default()),
+            Job::new("b".into(), Mode::Audio, JobOverrides::default()),
+            Job::new("c".into(), Mode::Auto, JobOverrides::default()),
+            Job::new("d".into(), Mode::Auto, JobOverrides::default()),
+        ];
+        jobs[0].state = JobState::Downloading;
+        jobs[1].state = JobState::Done;
+        jobs[2].state = JobState::Failed("nope".into());
+        jobs[3].state = JobState::Interrupted;
+
+        let saved = to_save(&jobs);
+        let urls: Vec<&str> = saved.iter().map(|s| s.url.as_str()).collect();
+        assert_eq!(urls, ["a", "d"], "done and failed are not outstanding work");
+        assert_eq!(saved[1].mode, Mode::Auto);
+    }
+
+    #[test]
+    fn a_restored_job_waits_to_be_asked() {
+        let job = Job::restored(Saved {
+            url: "https://example.com/v".into(),
+            mode: Mode::Audio,
+            overrides: JobOverrides {
+                whole_playlist: true,
+                height: Some(720),
+            },
+            title: "something".into(),
+        });
+        assert_eq!(job.state, JobState::Interrupted);
+        assert!(job.state.is_resumable());
+        // Terminal keeps it out of the running count and gives it a resume
+        // button, but it is not finished work.
+        assert!(job.state.is_terminal());
+        assert_eq!(job.mode, Mode::Audio);
+        assert_eq!(job.overrides.height, Some(720));
+        assert_eq!(job.title, "something");
+    }
 }
