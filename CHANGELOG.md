@@ -8,7 +8,7 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
-## 1.3.0
+## 1.3.0 - Snip Snip
 
 - **Clip a section.** After a download finishes, a clip button on the queue and
   in history opens it ready to cut, so you choose the part you want having seen
