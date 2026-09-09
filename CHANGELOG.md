@@ -27,6 +27,13 @@ never on a patch. They are optional even then.
   - "Cut exactly where i asked" re-encodes to start on the exact frame instead.
   - The original file is never touched.
 
+- **Keyboard shortcuts.** `ctrl + v` pastes a link and opens the save screen,
+  `ctrl + enter` downloads what is in the box, and `1`, `2` and `3` switch
+  between auto, audio and mute. On macOS that is `cmd`. The number keys stay
+  out of the way while you are typing in a box, and `ctrl + v` inside the link
+  box still means an ordinary paste. They are listed on the about screen,
+  since a shortcut nobody knows about is not a feature.
+
 ## 1.2.2 - The Narcissistic Update
 
 - The about screen says who made Snag, and links to their GitHub. It credited

@@ -8,6 +8,17 @@ use crate::util;
 /// The author's github, linked from the byline.
 const AUTHOR_URL: &str = "https://github.com/EmreO33";
 
+// Written the way the platform writes it, since ctrl and cmd are the same
+// shortcut to everyone except the person reading the label.
+#[cfg(target_os = "macos")]
+const SHORTCUT_MOD_V: &str = "cmd + v";
+#[cfg(not(target_os = "macos"))]
+const SHORTCUT_MOD_V: &str = "ctrl + v";
+#[cfg(target_os = "macos")]
+const SHORTCUT_MOD_ENTER: &str = "cmd + enter";
+#[cfg(not(target_os = "macos"))]
+const SHORTCUT_MOD_ENTER: &str = "ctrl + enter";
+
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
     let logo = app.logo.clone();
@@ -62,6 +73,33 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                     ui.add_space(6.0);
                 }
             });
+
+            ui.add_space(16.0);
+            theme::section_title(ui, &p, "keyboard");
+            theme::card(ui, &p, |ui| {
+                for (keys, what) in [
+                    (SHORTCUT_MOD_V, "paste a link and open the save screen"),
+                    (SHORTCUT_MOD_ENTER, "download what is in the box"),
+                    ("1  2  3", "auto, audio, mute"),
+                ] {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new(keys)
+                                .size(13.0)
+                                .color(p.text)
+                                .monospace(),
+                        );
+                        ui.add_space(10.0);
+                        ui.label(egui::RichText::new(what).size(12.0).color(p.dim));
+                    });
+                    ui.add_space(6.0);
+                }
+            });
+            theme::note_text(
+                ui,
+                &p,
+                "the number keys work when you are not typing in a box.",
+            );
 
             ui.add_space(16.0);
             theme::section_title(ui, &p, "licence");

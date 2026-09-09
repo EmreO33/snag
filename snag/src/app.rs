@@ -470,6 +470,59 @@ impl SnagApp {
     }
 
     /// Queue a download for the current URL box, one job per non-empty line.
+    /// Keys that work from anywhere, so the common path never needs the mouse.
+    ///
+    /// Anything without a modifier is ignored while a text box has the
+    /// keyboard, or typing a title into the output template would flip the
+    /// download mode underneath you. The setup screen is left alone entirely:
+    /// nothing there is worth a shortcut and half of it is text boxes.
+    fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+        if self.view == View::Setup {
+            return;
+        }
+        let typing = ctx.memory(|m| m.focused().is_some());
+
+        // COMMAND is ctrl on windows and linux, cmd on macos.
+        let chord = |key: egui::Key| egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, key);
+
+        // Paste and download in one, which is the whole app in one keystroke.
+        // Only when nothing is focused: inside the link box, ctrl+v means what
+        // it means everywhere else.
+        if !typing && ctx.input_mut(|i| i.consume_shortcut(&chord(egui::Key::V))) {
+            match crate::util::clipboard_text() {
+                Some(text) if !text.trim().is_empty() => {
+                    self.url_input = text.trim().to_string();
+                    self.view = View::Home;
+                }
+                _ => self.toast("clipboard is empty", true),
+            }
+        }
+
+        if ctx.input_mut(|i| i.consume_shortcut(&chord(egui::Key::Enter))) {
+            // Only leave the screen you are on if there is something to send.
+            // Being yanked to the link box to be told it is empty is worse
+            // than being told where you already were.
+            if !self.url_input.trim().is_empty() {
+                self.view = View::Home;
+            }
+            self.enqueue_current();
+        }
+
+        if !typing {
+            for (key, mode) in [
+                (egui::Key::Num1, Mode::Auto),
+                (egui::Key::Num2, Mode::Audio),
+                (egui::Key::Num3, Mode::Mute),
+            ] {
+                if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key)) {
+                    self.mode = mode;
+                    self.view = View::Home;
+                    self.toast(mode.label(), false);
+                }
+            }
+        }
+    }
+
     pub fn enqueue_current(&mut self) {
         let raw = self.url_input.trim().to_string();
         if raw.is_empty() {
@@ -1301,6 +1354,7 @@ impl eframe::App for SnagApp {
         self.track_window();
         self.handle_tray(ctx);
         self.drain_clipboard(ctx);
+        self.handle_shortcuts(ctx);
         self.handle_close_request(ctx);
         if self.applied_background != self.settings.background {
             self.applied_background = self.settings.background.clone();
