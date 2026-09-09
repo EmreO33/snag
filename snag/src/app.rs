@@ -128,6 +128,11 @@ pub struct RemuxUi {
     pub audio_codec: String,
     pub gif_fps: u32,
     pub gif_width: u32,
+    /// Held as typed rather than as seconds, so a half-finished time is not
+    /// rounded off under the cursor while it is being written.
+    pub clip_start: String,
+    pub clip_end: String,
+    pub clip_exact: bool,
     pub state: RemuxState,
     pub progress: f32,
     pub log: Vec<String>,
@@ -144,6 +149,9 @@ impl Default for RemuxUi {
             audio_codec: "copy".into(),
             gif_fps: 15,
             gif_width: 480,
+            clip_start: String::new(),
+            clip_end: String::new(),
+            clip_exact: false,
             state: RemuxState::Idle,
             progress: 0.0,
             log: Vec::new(),
@@ -951,6 +959,38 @@ impl SnagApp {
             audio_ext
         };
 
+        // Empty means "from the beginning" and "to the end". Anything else has
+        // to be a time, because guessing at what was meant would silently cut
+        // the wrong part of the file.
+        let mut clip_start = 0.0;
+        let mut clip_end = None;
+        if self.remux.op == RemuxOp::Clip {
+            let start_text = self.remux.clip_start.trim();
+            if !start_text.is_empty() {
+                match crate::remux::parse_timecode(start_text) {
+                    Some(v) => clip_start = v,
+                    None => {
+                        self.toast("start is not a time. try 1:30 or 0:01:30.", true);
+                        return;
+                    }
+                }
+            }
+            let end_text = self.remux.clip_end.trim();
+            if !end_text.is_empty() {
+                match crate::remux::parse_timecode(end_text) {
+                    Some(v) => clip_end = Some(v),
+                    None => {
+                        self.toast("end is not a time. try 2:00 or 0:02:00.", true);
+                        return;
+                    }
+                }
+            }
+            if clip_end.is_some_and(|end| end <= clip_start) {
+                self.toast("the end has to come after the start", true);
+                return;
+            }
+        }
+
         let output =
             crate::remux::output_path(&input, self.remux.op, &self.remux.container, &audio_ext);
 
@@ -963,15 +1003,38 @@ impl SnagApp {
             input,
             output,
             self.remux.op,
-            self.remux.audio_codec.clone(),
-            self.remux.gif_fps,
-            self.remux.gif_width,
+            crate::remux::Options {
+                audio_codec: self.remux.audio_codec.clone(),
+                gif_fps: self.remux.gif_fps,
+                gif_width: self.remux.gif_width,
+                clip_start,
+                clip_end,
+                clip_exact: self.remux.clip_exact,
+            },
             self.settings.clone(),
             self.remux.child.clone(),
             self.remux.cancel_flag.clone(),
             self.remux_tx.clone(),
             Self::repainter(ctx),
         );
+    }
+
+    /// Load a finished download into the remux screen, ready to be clipped.
+    ///
+    /// Clipping is offered after the download rather than before it because
+    /// the whole file is what you have to look at to know which part you
+    /// wanted.
+    pub fn clip_file(&mut self, file: std::path::PathBuf) {
+        if self.remux.state == RemuxState::Running {
+            self.toast("finish the current remux first", true);
+            return;
+        }
+        self.remux.input = Some(file);
+        self.remux.op = RemuxOp::Clip;
+        self.remux.state = RemuxState::Idle;
+        self.remux.progress = 0.0;
+        self.remux.log.clear();
+        self.view = View::Remux;
     }
 
     pub fn cancel_remux(&mut self) {

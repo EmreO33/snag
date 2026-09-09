@@ -8,6 +8,20 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.3.0
+
+- **Clip a section.** After a download finishes, a clip button on the queue and
+  in history opens it ready to cut, so you choose the part you want having seen
+  the whole thing rather than having to guess beforehand. It is also an
+  operation on the remux screen for any file you already have. Times are
+  written the way you would say them: `90`, `1:30` or `0:01:30`. Leave the
+  start empty to begin at the beginning, and the end empty to run to the end of
+  the file.
+  - By default nothing is re-encoded, so a clip finishes almost instantly, at
+    the cost of starting on the nearest keyframe before the time you asked for.
+  - "Cut exactly where i asked" re-encodes to start on the exact frame instead.
+  - The original file is never touched.
+
 ## 1.2.2 - The Narcissistic Update
 
 - The about screen says who made Snag, and links to their GitHub. It credited

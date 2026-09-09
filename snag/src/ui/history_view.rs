@@ -7,6 +7,7 @@ use crate::util;
 enum Action {
     Open(std::path::PathBuf),
     Reveal(std::path::PathBuf),
+    Clip(std::path::PathBuf),
     CopyUrl(String),
     Again(String, crate::settings::Mode),
     Forget(usize),
@@ -108,6 +109,9 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                             if theme::pill(ui, &p, "show in folder", false, here).clicked() {
                                 actions.push(Action::Reveal(file.clone()));
                             }
+                            if theme::pill(ui, &p, "clip", false, here).clicked() {
+                                actions.push(Action::Clip(file.clone()));
+                            }
                         }
                         if theme::pill(ui, &p, "download again", false, true).clicked() {
                             actions.push(Action::Again(entry.url.clone(), entry.mode));
@@ -129,6 +133,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
         match action {
             Action::Open(path) => util::open_path(&path),
             Action::Reveal(path) => util::reveal(&path),
+            Action::Clip(path) => app.clip_file(path),
             Action::CopyUrl(url) => {
                 util::set_clipboard_text(&url);
                 app.toast("link copied", false);

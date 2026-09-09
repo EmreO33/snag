@@ -12,6 +12,7 @@ enum Action {
     ToggleLog(u64),
     Reveal(std::path::PathBuf),
     Open(std::path::PathBuf),
+    Clip(std::path::PathBuf),
     CopyUrl(String),
 }
 
@@ -103,6 +104,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             }
             Action::Reveal(path) => util::reveal(&path),
             Action::Open(path) => util::open_path(&path),
+            Action::Clip(path) => app.clip_file(path),
             Action::CopyUrl(url) => {
                 util::set_clipboard_text(&url);
                 app.toast("link copied", false);
@@ -206,6 +208,9 @@ fn job_card(
                     }
                     if theme::pill(ui, p, "show in folder", false, true).clicked() {
                         actions.push(Action::Reveal(file.clone()));
+                    }
+                    if theme::pill(ui, p, "clip", false, true).clicked() {
+                        actions.push(Action::Clip(file.clone()));
                     }
                 }
                 if theme::pill(ui, p, "copy link", false, true).clicked() {

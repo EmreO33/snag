@@ -116,6 +116,28 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                         "streams are copied as they are. a container that cannot hold the source codecs will fail.",
                     );
                 }
+                RemuxOp::Clip => {
+                    theme::section_title(ui, &p, "from and to");
+                    theme::card(ui, &p, |ui| {
+                        super::field_row(ui, &p, "from", &mut app.remux.clip_start, "0:00");
+                        ui.add_space(6.0);
+                        super::field_row(ui, &p, "to", &mut app.remux.clip_end, "end of file");
+                    });
+                    theme::note_text(
+                        ui,
+                        &p,
+                        "written the way you would say it: 90, 1:30 or 0:01:30. leave from empty to start at the beginning, and to empty to run to the end.",
+                    );
+
+                    theme::section_title(ui, &p, "accuracy");
+                    theme::toggle_row(
+                        ui,
+                        &p,
+                        "cut exactly where i asked",
+                        "off, the cut lands on the nearest keyframe before your start, so it may begin up to a few seconds early. nothing is re-encoded and it finishes almost instantly. on, it starts on the exact frame, which means re-encoding the video and taking as long as the clip is.",
+                        &mut app.remux.clip_exact,
+                    );
+                }
                 RemuxOp::ExtractAudio => {
                     theme::section_title(ui, &p, "audio codec");
                     string_pills(ui, &p, &mut app.remux.audio_codec, AUDIO_CODECS);

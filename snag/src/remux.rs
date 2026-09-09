@@ -14,6 +14,7 @@ use crate::util;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RemuxOp {
     Container,
+    Clip,
     ExtractAudio,
     StripAudio,
     ToGif,
@@ -22,6 +23,7 @@ pub enum RemuxOp {
 impl RemuxOp {
     pub const ALL: &'static [RemuxOp] = &[
         RemuxOp::Container,
+        RemuxOp::Clip,
         RemuxOp::ExtractAudio,
         RemuxOp::StripAudio,
         RemuxOp::ToGif,
@@ -29,6 +31,7 @@ impl RemuxOp {
     pub fn label(&self) -> &'static str {
         match self {
             RemuxOp::Container => "change container",
+            RemuxOp::Clip => "clip",
             RemuxOp::ExtractAudio => "extract audio",
             RemuxOp::StripAudio => "mute",
             RemuxOp::ToGif => "to gif",
@@ -37,6 +40,7 @@ impl RemuxOp {
     pub fn note(&self) -> &'static str {
         match self {
             RemuxOp::Container => "rewraps the same streams into another container. no quality loss, near-instant.",
+            RemuxOp::Clip => "keeps the part between two times and throws the rest away. the original file is left alone.",
             RemuxOp::ExtractAudio => "pulls the audio track out into its own file, copied when the container allows it.",
             RemuxOp::StripAudio => "drops the audio track and keeps the video exactly as it was.",
             RemuxOp::ToGif => "re-encodes to an animated GIF. inefficient: the file may be obnoxiously big and low quality.",
@@ -59,6 +63,81 @@ pub enum RemuxEvent {
     Progress(f32),
     Log(String),
     State(RemuxState),
+}
+
+/// Everything an operation needs beyond the two paths.
+///
+/// A struct rather than more arguments: this had already grown past the point
+/// where a reader could tell the two gif numbers apart at the call site.
+#[derive(Debug, Clone)]
+pub struct Options {
+    pub audio_codec: String,
+    pub gif_fps: u32,
+    pub gif_width: u32,
+    /// Where a clip starts, in seconds from the beginning of the source.
+    pub clip_start: f64,
+    /// Where it ends. None runs to the end of the file.
+    pub clip_end: Option<f64>,
+    /// Cut exactly where asked rather than at the nearest keyframe, which
+    /// means re-encoding.
+    pub clip_exact: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            audio_codec: "copy".into(),
+            gif_fps: 15,
+            gif_width: 480,
+            clip_start: 0.0,
+            clip_end: None,
+            clip_exact: false,
+        }
+    }
+}
+
+impl Options {
+    /// How long the result runs for, when that is knowable without the file.
+    fn clip_length(&self, source: Option<f64>) -> Option<f64> {
+        let end = self.clip_end.or(source)?;
+        Some((end - self.clip_start).max(0.0))
+    }
+}
+
+/// Read a time written the way a person writes one: `90`, `1:30`, `1:02:03`,
+/// or `1:30.5`.
+///
+/// Returns None for anything that is not a time, so the UI can refuse to start
+/// rather than handing ffmpeg something it will interpret its own way.
+pub fn parse_timecode(raw: &str) -> Option<f64> {
+    let text = raw.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    let parts: Vec<&str> = text.split(':').collect();
+    if parts.len() > 3 {
+        return None;
+    }
+
+    let mut seconds = 0.0;
+    for (i, part) in parts.iter().enumerate() {
+        let part = part.trim();
+        if part.is_empty() {
+            return None;
+        }
+        let value: f64 = part.parse().ok()?;
+        if !value.is_finite() || value < 0.0 {
+            return None;
+        }
+        // 1:75 is a typo, not 2:15. Only the leading field may run over,
+        // because 90:00 is a legitimate way to write an hour and a half.
+        if i > 0 && value >= 60.0 {
+            return None;
+        }
+        seconds += value * 60f64.powi((parts.len() - 1 - i) as i32);
+    }
+    Some(seconds)
 }
 
 /// Best-effort media duration in seconds, used to turn ffmpeg's progress into a bar.
@@ -102,8 +181,16 @@ pub fn output_path(input: &Path, op: RemuxOp, container: &str, audio_ext: &str) 
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "output".into());
 
+    let source_ext = input
+        .extension()
+        .map(|e| e.to_string_lossy().to_string())
+        .unwrap_or_else(|| "mp4".into());
+
     let (suffix, ext) = match op {
         RemuxOp::Container => ("remux", container.to_string()),
+        // A clip stays in whatever the source already was: the point is to
+        // take a piece of it, not to change it into something else.
+        RemuxOp::Clip => ("clip", source_ext),
         RemuxOp::ExtractAudio => ("audio", audio_ext.to_string()),
         RemuxOp::StripAudio => ("mute", container.to_string()),
         RemuxOp::ToGif => ("gif", "gif".to_string()),
@@ -118,14 +205,7 @@ pub fn output_path(input: &Path, op: RemuxOp, container: &str, audio_ext: &str) 
     candidate
 }
 
-fn build_args(
-    input: &Path,
-    output: &Path,
-    op: RemuxOp,
-    audio_codec: &str,
-    gif_fps: u32,
-    gif_width: u32,
-) -> Vec<String> {
+fn build_args(input: &Path, output: &Path, op: RemuxOp, o: &Options) -> Vec<String> {
     let mut a: Vec<String> = vec![
         "-hide_banner".into(),
         "-loglevel".into(),
@@ -134,13 +214,54 @@ fn build_args(
         "-progress".into(),
         "pipe:1".into(),
         "-y".into(),
-        "-i".into(),
-        input.display().to_string(),
     ];
+
+    // Seeking before -i is the fast kind: ffmpeg jumps straight there instead
+    // of decoding its way through everything before it. The catch is that a
+    // stream copy can only start on a keyframe, so an exact cut has to seek on
+    // the output side and re-encode to get the frame actually asked for.
+    let seek_on_input = op == RemuxOp::Clip && !o.clip_exact;
+    if seek_on_input {
+        a.extend(["-ss".into(), o.clip_start.to_string()]);
+        if let Some(end) = o.clip_end {
+            a.extend(["-to".into(), end.to_string()]);
+        }
+    }
+
+    a.extend(["-i".into(), input.display().to_string()]);
+
+    if op == RemuxOp::Clip && o.clip_exact {
+        a.extend(["-ss".into(), o.clip_start.to_string()]);
+        if let Some(end) = o.clip_end {
+            a.extend(["-to".into(), end.to_string()]);
+        }
+    }
+
+    let audio_codec = o.audio_codec.as_str();
+    let (gif_fps, gif_width) = (o.gif_fps, o.gif_width);
 
     match op {
         RemuxOp::Container => {
             a.extend(["-map".into(), "0".into(), "-c".into(), "copy".into()]);
+        }
+        RemuxOp::Clip => {
+            a.extend(["-map".into(), "0".into()]);
+            if o.clip_exact {
+                // The source could be anything, so the cut lands on codecs
+                // that every container and player will take.
+                a.extend([
+                    "-c:v".into(),
+                    "libx264".into(),
+                    "-crf".into(),
+                    "18".into(),
+                    "-preset".into(),
+                    "veryfast".into(),
+                    "-c:a".into(),
+                    "aac".into(),
+                ]);
+            } else {
+                a.extend(["-c".into(), "copy".into()]);
+            }
         }
         RemuxOp::StripAudio => {
             a.extend([
@@ -184,14 +305,15 @@ fn build_args(
     a
 }
 
+// The two halves of "stop this" and the two ends of the event channel are
+// four of these on their own, and bundling them would hide what the caller is
+// handing over rather than clarify it.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn(
     input: PathBuf,
     output: PathBuf,
     op: RemuxOp,
-    audio_codec: String,
-    gif_fps: u32,
-    gif_width: u32,
+    options: Options,
     settings: Settings,
     child_slot: Arc<Mutex<Option<Child>>>,
     cancel_flag: Arc<AtomicBool>,
@@ -203,8 +325,16 @@ pub fn spawn(
         repaint();
 
         let bin = settings.ffmpeg_bin();
-        let duration = probe_duration(&bin, &input);
-        let args = build_args(&input, &output, op, &audio_codec, gif_fps, gif_width);
+        let source_duration = probe_duration(&bin, &input);
+        // A clip's progress runs against the length of the clip, not of the
+        // file it came out of, or a ten second cut from an hour long video
+        // would sit at one percent and then finish.
+        let duration = if op == RemuxOp::Clip {
+            options.clip_length(source_duration)
+        } else {
+            source_duration
+        };
+        let args = build_args(&input, &output, op, &options);
 
         let spawned = util::command(&bin)
             .args(&args)
@@ -295,4 +425,79 @@ pub fn spawn(
         let _ = tx.send(RemuxEvent::State(state));
         repaint();
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_ways_people_write_a_time() {
+        assert_eq!(parse_timecode("90"), Some(90.0));
+        assert_eq!(parse_timecode("1:30"), Some(90.0));
+        assert_eq!(parse_timecode("0:01:30"), Some(90.0));
+        assert_eq!(parse_timecode("1:02:03"), Some(3723.0));
+        assert_eq!(parse_timecode("  2:00  "), Some(120.0));
+        assert_eq!(parse_timecode("1:30.5"), Some(90.5));
+        // An hour and a half is a fine thing to write as ninety minutes.
+        assert_eq!(parse_timecode("90:00"), Some(5400.0));
+    }
+
+    #[test]
+    fn refuses_anything_that_is_not_a_time() {
+        for bad in [
+            "", "   ", "abc", "1:", ":30", "1::30", "-5", "1:2:3:4", "1:75",
+        ] {
+            assert_eq!(parse_timecode(bad), None, "should be rejected: {bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_copied_clip_seeks_before_the_input_and_an_exact_one_after() {
+        let input = Path::new("in.mp4");
+        let output = Path::new("out.mp4");
+        let options = Options {
+            clip_start: 10.0,
+            clip_end: Some(20.0),
+            ..Options::default()
+        };
+
+        let copied = build_args(input, output, RemuxOp::Clip, &options);
+        let i = copied.iter().position(|a| a == "-i").unwrap();
+        let ss = copied.iter().position(|a| a == "-ss").unwrap();
+        assert!(ss < i, "a stream copy seeks the input: {copied:?}");
+        assert!(copied.windows(2).any(|w| w == ["-c", "copy"]));
+
+        let exact = build_args(
+            input,
+            output,
+            RemuxOp::Clip,
+            &Options {
+                clip_exact: true,
+                ..options
+            },
+        );
+        let i = exact.iter().position(|a| a == "-i").unwrap();
+        let ss = exact.iter().position(|a| a == "-ss").unwrap();
+        assert!(ss > i, "an exact cut seeks the output: {exact:?}");
+        assert!(!exact.windows(2).any(|w| w == ["-c", "copy"]));
+    }
+
+    #[test]
+    fn an_open_ended_clip_runs_to_the_end_of_the_file() {
+        let options = Options {
+            clip_start: 5.0,
+            clip_end: None,
+            ..Options::default()
+        };
+        let args = build_args(
+            Path::new("in.mkv"),
+            Path::new("out.mkv"),
+            RemuxOp::Clip,
+            &options,
+        );
+        assert!(!args.iter().any(|a| a == "-to"), "{args:?}");
+        assert_eq!(options.clip_length(Some(30.0)), Some(25.0));
+        assert_eq!(options.clip_length(None), None);
+    }
 }
