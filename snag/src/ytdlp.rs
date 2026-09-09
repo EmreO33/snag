@@ -120,6 +120,31 @@ pub fn split_args(raw: &str) -> Vec<String> {
     out
 }
 
+/// The audio half of a format selector when a dubbed track is wanted.
+///
+/// A dub is picked by filtering the audio streams on their language. The
+/// obvious looking alternatives do not work: `--extractor-args youtube:lang`
+/// only translates titles and descriptions, and `-S lang:xx` leaves the
+/// original track selected. Both were measured against a video carrying two
+/// dozen audio tracks.
+fn dubbed_audio(s: &Settings) -> Option<String> {
+    let lang = s.audio.dub_language.trim();
+    if lang.is_empty() || lang == "original" {
+        return None;
+    }
+    // A language code and nothing else: the rest of the selector is syntax,
+    // and a stray bracket in here would rewrite the expression around it.
+    let code: String = lang
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect();
+    if code.is_empty() {
+        return None;
+    }
+    // Prefix matched, so es also accepts es-419 and en accepts en-US.
+    Some(format!("ba[language^={code}]"))
+}
+
 /// Build the `-f` format selector for a mode.
 fn format_selector(mode: Mode, overrides: JobOverrides, s: &Settings) -> String {
     let mut filters = String::new();
@@ -134,10 +159,16 @@ fn format_selector(mode: Mode, overrides: JobOverrides, s: &Settings) -> String 
         filters.push_str("[vcodec!*=hev][vcodec!*=hvc][vcodec!*=h265]");
     }
 
-    match mode {
-        Mode::Audio => "bestaudio/best".to_string(),
-        Mode::Mute => format!("bv*{filters}/bv*/b{filters}/b"),
-        Mode::Auto => format!("bv*{filters}+ba/b{filters}/bv*+ba/b"),
+    // Every dubbed branch falls through to the ordinary one, so asking for a
+    // language a video does not carry still downloads it.
+    match (mode, dubbed_audio(s)) {
+        (Mode::Audio, None) => "bestaudio/best".to_string(),
+        (Mode::Audio, Some(dub)) => format!("{dub}/bestaudio/best"),
+        (Mode::Mute, _) => format!("bv*{filters}/bv*/b{filters}/b"),
+        (Mode::Auto, None) => format!("bv*{filters}+ba/b{filters}/bv*+ba/b"),
+        (Mode::Auto, Some(dub)) => {
+            format!("bv*{filters}+{dub}/bv*{filters}+ba/b{filters}/bv*+ba/b")
+        }
     }
 }
 
@@ -250,13 +281,6 @@ pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) 
     if s.audio.normalize_loudness && mode == Mode::Audio {
         push(&mut a, "--postprocessor-args");
         push(&mut a, "ffmpeg:-af loudnorm=I=-16:TP=-1.5:LRA=11");
-    }
-
-    // Dubbed audio track selection (YouTube).
-    let lang = s.audio.dub_language.trim();
-    if !lang.is_empty() && lang != "original" {
-        push(&mut a, "--extractor-args");
-        a.push(format!("youtube:lang={lang}"));
     }
 
     // --- metadata -----------------------------------------------------------
@@ -431,7 +455,7 @@ pub fn explain_error(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::explain_error;
+    use super::*;
 
     #[test]
     fn age_restriction_gets_an_actionable_hint() {
@@ -442,6 +466,53 @@ mod tests {
         );
         // The original is kept underneath rather than thrown away.
         assert!(out.contains("Sign in to confirm your age"));
+    }
+
+    /// The bug this replaced: the dub setting produced an extractor argument
+    /// that translates metadata and leaves the audio track alone, so asking
+    /// for a dub did nothing at all.
+    #[test]
+    fn a_dub_is_chosen_by_filtering_the_audio_language() {
+        let mut s = Settings::default();
+        s.audio.dub_language = "es".into();
+
+        let auto = format_selector(Mode::Auto, JobOverrides::default(), &s);
+        assert!(auto.starts_with("bv*[height<=1080]"), "got: {auto}");
+        assert!(auto.contains("+ba[language^=es]"), "got: {auto}");
+        // And still downloads a video that has no spanish track.
+        assert!(auto.contains("/bv*+ba/b"), "got: {auto}");
+
+        let audio = format_selector(Mode::Audio, JobOverrides::default(), &s);
+        assert_eq!(audio, "ba[language^=es]/bestaudio/best");
+
+        // Muted video has no audio to pick a language for.
+        let mute = format_selector(Mode::Mute, JobOverrides::default(), &s);
+        assert!(!mute.contains("language"), "got: {mute}");
+    }
+
+    #[test]
+    fn no_dub_leaves_the_selector_as_it_was() {
+        let s = Settings::default();
+        assert_eq!(
+            format_selector(Mode::Audio, JobOverrides::default(), &s),
+            "bestaudio/best"
+        );
+        assert!(!format_selector(Mode::Auto, JobOverrides::default(), &s).contains("language"));
+    }
+
+    #[test]
+    fn a_language_code_cannot_break_out_of_the_selector() {
+        let mut s = Settings::default();
+        s.audio.dub_language = "es]+bv*[height<=144".into();
+        let selector = format_selector(Mode::Audio, JobOverrides::default(), &s);
+        assert_eq!(selector, "ba[language^=esbvheight144]/bestaudio/best");
+
+        // Punctuation on its own is not a language, so it is ignored.
+        s.audio.dub_language = "][".into();
+        assert_eq!(
+            format_selector(Mode::Audio, JobOverrides::default(), &s),
+            "bestaudio/best"
+        );
     }
 
     #[test]

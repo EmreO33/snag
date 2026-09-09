@@ -46,6 +46,16 @@ never on a patch. They are optional even then.
   file per chapter alongside the whole thing, under settings > metadata. A
   video without chapters downloads exactly as before. Needs ffmpeg.
 
+- **Fixed: the preferred dub language never worked.** Asking for a dubbed
+  audio track produced a yt-dlp argument that translates titles and
+  descriptions and leaves the audio alone, so the setting has done nothing
+  since it was added. Dubs are now chosen by filtering the audio streams on
+  their language, and a video that does not carry the language you asked for
+  still downloads as usual.
+  - Subtitles are chosen separately from the audio track, and both screens now
+    say so. A Spanish dub does not imply Spanish subtitles: pick those under
+    settings > metadata, where `all` takes every track the site offers.
+
 - **Subtitles as files.** Subtitles can now be saved next to the media file
   rather than only embedded in it, as `.srt` since that is what every player
   takes. It works in audio mode too, where embedding does not.

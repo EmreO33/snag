@@ -292,7 +292,7 @@ fn audio(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
     theme::note_text(
         ui,
         &p,
-        "a language code such as en, de or ja. snag uses the dubbed track when it exists, otherwise the original.",
+        "a language code such as en, de or ja. snag takes the dubbed track when the video carries one, and the original when it does not. subtitles are chosen separately, under metadata.",
     );
 
     changed
@@ -377,7 +377,7 @@ fn metadata(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         theme::note_text(
             ui,
             &p,
-            "comma separated. use all for every available track.",
+            "a language code such as en, de or ja, comma separated for more than one. all takes every track the site has. this is independent of the dubbed audio track: a spanish dub does not imply spanish subtitles unless you ask for them here.",
         );
     }
 
