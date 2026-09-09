@@ -17,6 +17,11 @@ never on a patch. They are optional even then.
   written the way you would say them: `90`, `1:30` or `0:01:30`. Leave the
   start empty to begin at the beginning, and the end empty to run to the end of
   the file.
+  - There is a **timeline** to drag, with frames pulled from the video along it
+    so you can see where you are cutting. Drag either end; the part you are
+    keeping stays bright and the rest dims. The times underneath follow the
+    handles, and typing in them moves the handles, so the picture and the
+    numbers always agree.
   - By default nothing is re-encoded, so a clip finishes almost instantly, at
     the cost of starting on the nearest keyframe before the time you asked for.
   - "Cut exactly where i asked" re-encodes to start on the exact frame instead.

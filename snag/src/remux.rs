@@ -104,6 +104,17 @@ impl Options {
     }
 }
 
+/// Seconds back into `1:02:03`, for writing a dragged handle into the boxes.
+pub fn format_timecode(seconds: f64) -> String {
+    let total = seconds.max(0.0).round() as u64;
+    let (h, m, s) = (total / 3600, (total % 3600) / 60, total % 60);
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
 /// Read a time written the way a person writes one: `90`, `1:30`, `1:02:03`,
 /// or `1:30.5`.
 ///
@@ -140,8 +151,9 @@ pub fn parse_timecode(raw: &str) -> Option<f64> {
     Some(seconds)
 }
 
-/// Best-effort media duration in seconds, used to turn ffmpeg's progress into a bar.
-fn probe_duration(ffmpeg_bin: &str, input: &Path) -> Option<f64> {
+/// Best-effort media duration in seconds, used to turn ffmpeg's progress into
+/// a bar and to size the clip scrubber.
+pub fn probe_duration(ffmpeg_bin: &str, input: &Path) -> Option<f64> {
     // ffprobe usually sits next to ffmpeg; fall back to PATH.
     let probe = Path::new(ffmpeg_bin)
         .parent()
@@ -441,6 +453,14 @@ mod tests {
         assert_eq!(parse_timecode("1:30.5"), Some(90.5));
         // An hour and a half is a fine thing to write as ninety minutes.
         assert_eq!(parse_timecode("90:00"), Some(5400.0));
+    }
+
+    #[test]
+    fn a_time_survives_the_round_trip() {
+        for text in ["0:30", "1:30", "1:02:03"] {
+            let seconds = parse_timecode(text).unwrap();
+            assert_eq!(format_timecode(seconds), text);
+        }
     }
 
     #[test]

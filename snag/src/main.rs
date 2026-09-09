@@ -3,6 +3,7 @@
 mod app;
 mod bootstrap;
 mod clipboard;
+mod filmstrip;
 mod history;
 mod icon;
 mod installer;

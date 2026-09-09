@@ -121,6 +121,13 @@ pub enum SetupEvent {
 }
 
 /// State for the remux screen, which runs at most one ffmpeg job at a time.
+/// Which end of a clip a drag is moving.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ClipHandle {
+    Start,
+    End,
+}
+
 pub struct RemuxUi {
     pub input: Option<PathBuf>,
     pub op: RemuxOp,
@@ -133,6 +140,15 @@ pub struct RemuxUi {
     pub clip_start: String,
     pub clip_end: String,
     pub clip_exact: bool,
+    /// Which end of the clip the pointer is currently dragging, if either.
+    pub clip_dragging: Option<ClipHandle>,
+    /// How long the loaded file runs, once ffprobe has said so.
+    pub duration: Option<f64>,
+    /// Frames across the loaded file, for the scrubber to draw.
+    pub filmstrip: Vec<egui::TextureHandle>,
+    /// The file the duration and frames belong to, so they are never shown
+    /// against a different one.
+    pub strip_for: Option<PathBuf>,
     pub state: RemuxState,
     pub progress: f32,
     pub log: Vec<String>,
@@ -152,6 +168,10 @@ impl Default for RemuxUi {
             clip_start: String::new(),
             clip_end: String::new(),
             clip_exact: false,
+            clip_dragging: None,
+            duration: None,
+            filmstrip: Vec::new(),
+            strip_for: None,
             state: RemuxState::Idle,
             progress: 0.0,
             log: Vec::new(),
@@ -222,6 +242,8 @@ pub struct SnagApp {
     pub remux: RemuxUi,
     remux_tx: Sender<RemuxEvent>,
     remux_rx: Receiver<RemuxEvent>,
+    strip_tx: Sender<crate::filmstrip::Strip>,
+    strip_rx: Receiver<crate::filmstrip::Strip>,
 
     pub setup: SetupState,
     setup_tx: Sender<SetupEvent>,
@@ -256,6 +278,7 @@ impl SnagApp {
 
         let (job_tx, job_rx) = channel();
         let (remux_tx, remux_rx) = channel();
+        let (strip_tx, strip_rx) = channel();
         let (upd_tx, upd_rx) = channel();
         let (setup_tx, setup_rx) = channel();
         let (app_tx, app_rx) = channel();
@@ -306,6 +329,8 @@ impl SnagApp {
             remux: RemuxUi::default(),
             remux_tx,
             remux_rx,
+            strip_tx,
+            strip_rx,
             setup: SetupState::new(&settings),
             setup_tx,
             setup_rx,
@@ -637,6 +662,46 @@ impl SnagApp {
             self.signin_tx.clone(),
             Self::repainter(ctx),
         );
+    }
+
+    /// Keep the scrubber's frames pointed at whatever file is loaded.
+    fn pump_filmstrip(&mut self, ctx: &egui::Context) {
+        let input = self.remux.input.clone();
+        if self.remux.strip_for != input {
+            self.remux.strip_for = input.clone();
+            self.remux.duration = None;
+            self.remux.filmstrip.clear();
+            if let Some(path) = input {
+                crate::filmstrip::spawn(
+                    path,
+                    self.settings.clone(),
+                    self.strip_tx.clone(),
+                    Self::repainter(ctx),
+                );
+            }
+        }
+
+        while let Ok(strip) = self.strip_rx.try_recv() {
+            // A strip for a file that has since been swapped out is stale.
+            if self.remux.strip_for.as_deref() != Some(strip.input.as_path()) {
+                continue;
+            }
+            self.remux.duration = strip.duration;
+            if !strip.frames.is_empty() {
+                self.remux.filmstrip = strip
+                    .frames
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, image)| {
+                        ctx.load_texture(
+                            format!("filmstrip_{i}"),
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        )
+                    })
+                    .collect();
+            }
+        }
     }
 
     fn drain_signin_events(&mut self) {
@@ -1232,6 +1297,7 @@ impl eframe::App for SnagApp {
         self.drain_setup_events();
         self.pump_queue(ctx);
         self.pump_probe(ctx);
+        self.pump_filmstrip(ctx);
         self.track_window();
         self.handle_tray(ctx);
         self.drain_clipboard(ctx);
