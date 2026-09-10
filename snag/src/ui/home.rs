@@ -178,6 +178,24 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                     },
                                 );
                             });
+                            // Why it failed, not just that it did. This list is
+                            // where a failure is first seen, and sending someone
+                            // to another screen to find out what went wrong is how
+                            // you end up being sent a photograph of the word
+                            // "failed".
+                            if let JobState::Failed(reason) = &state {
+                                ui.add_space(4.0);
+                                // The first line is the plain explanation;
+                                // yt-dlp's own words follow it underneath.
+                                let short: String = reason
+                                    .lines()
+                                    .next()
+                                    .unwrap_or_default()
+                                    .chars()
+                                    .take(96)
+                                    .collect();
+                                ui.label(egui::RichText::new(short).size(11.0).color(p.dim));
+                            }
                             if state.is_active() {
                                 ui.add_space(6.0);
                                 theme::progress_bar(ui, &p, frac, frac <= 0.0);

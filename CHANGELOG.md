@@ -8,6 +8,17 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.3.2
+
+- **A failed download says why, where you are standing.** The recent list on
+  the save screen showed the word "failed" and nothing else, so finding out
+  what went wrong meant knowing to go and look in the queue. It now carries
+  the reason underneath the title.
+- **A "copy details" button** on a failed job in the queue. It copies the
+  error together with the Snag and yt-dlp versions, the operating system, the
+  mode and the link, so a bug report arrives complete rather than as a
+  photograph of the word "failed".
+
 ## 1.3.1
 
 - **Fixed: Snag was invisible to screen readers.** Two things were wrong. The accessibility integration had been

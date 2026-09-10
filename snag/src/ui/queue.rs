@@ -14,6 +14,7 @@ enum Action {
     Reveal(std::path::PathBuf),
     Open(std::path::PathBuf),
     Clip(std::path::PathBuf),
+    CopyDetails(u64),
     CopyUrl(String),
 }
 
@@ -146,6 +147,29 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             Action::Reveal(path) => util::reveal(&path),
             Action::Open(path) => util::open_path(&path),
             Action::Clip(path) => app.clip_file(path),
+            Action::CopyDetails(id) => {
+                if let Some(j) = app.jobs.iter().find(|j| j.id == id) {
+                    let reason = match &j.state {
+                        JobState::Failed(r) => r.as_str(),
+                        _ => "",
+                    };
+                    let ytdlp = if app.ytdlp_version.is_empty() {
+                        "unknown"
+                    } else {
+                        app.ytdlp_version.as_str()
+                    };
+                    util::set_clipboard_text(&format!(
+                        "snag {}\nyt-dlp {}\nos {}\nmode {}\nurl {}\n\n{}",
+                        env!("CARGO_PKG_VERSION"),
+                        ytdlp,
+                        std::env::consts::OS,
+                        j.mode.label(),
+                        j.url,
+                        reason
+                    ));
+                    app.toast("details copied, paste them into the bug report", false);
+                }
+            }
             Action::CopyUrl(url) => {
                 util::set_clipboard_text(&url);
                 app.toast("link copied", false);
@@ -256,6 +280,13 @@ fn job_card(
                 }
                 if theme::pill(ui, p, "copy link", false, true).clicked() {
                     actions.push(Action::CopyUrl(job.url.clone()));
+                }
+                // A failure is worth reporting, and a report is only useful
+                // with the versions and the mode attached to it.
+                if matches!(job.state, JobState::Failed(_))
+                    && theme::pill(ui, p, "copy details", false, true).clicked()
+                {
+                    actions.push(Action::CopyDetails(job.id));
                 }
                 if theme::pill(
                     ui,
