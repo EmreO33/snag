@@ -1,0 +1,10 @@
+# Link the C runtime into the binary on Windows rather than expecting
+# VCRUNTIME140.dll to be on the machine. It is not on a clean install, and a
+# Snag that needs it exits with STATUS_DLL_NOT_FOUND before drawing a window,
+# which is how the winget validator found it.
+#
+# An environment RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS replaces this entirely
+# rather than adding to it, so packaging/build-windows.ps1 carries the same
+# flag, and CI checks the finished binary's imports either way.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

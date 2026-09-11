@@ -8,6 +8,17 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.3.3
+
+- **Fixed: Snag would not start on a clean Windows.** Every Windows build so
+  far needed the Visual C++ runtime, `VCRUNTIME140.dll`, which a fresh Windows
+  does not have. Without it Snag exited with `STATUS_DLL_NOT_FOUND` before
+  drawing a window. Most machines have the runtime from other software, which
+  is why it went unnoticed until the winget validator ran Snag on a machine
+  that did not. The runtime is now built into the binary, at a cost of about
+  150 KB, and the release checks the finished file for the dependency so it
+  cannot come back.
+
 ## 1.3.2
 
 - **A failed download says why, where you are standing.** The recent list on

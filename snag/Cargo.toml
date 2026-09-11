@@ -1,6 +1,6 @@
 [package]
 name = "snag"
-version = "1.3.2"
+version = "1.3.3"
 edition = "2021"
 description = "Snag - a fast, native video downloader built on yt-dlp"
 authors = ["Snag"]

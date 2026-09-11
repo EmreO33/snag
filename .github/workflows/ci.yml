@@ -74,6 +74,14 @@ jobs:
       # Actually fetch and run yt-dlp on a clean machine. This is the check that
       # would have caught shipping the python zipapp: it downloaded fine and
       # then failed to exec, which no amount of compiling would reveal.
+      # A clean windows has no visual c++ runtime, so the binary must not
+      # need one. Checked on the finished file rather than trusted to a flag.
+      - name: the windows binary needs no visual c++ runtime
+        if: runner.os == 'Windows'
+        run: |
+          python -m pip install --quiet pefile
+          python packaging/check-imports.py snag/target/release/snag.exe
+
       - name: smoke test the yt-dlp installer
         if: runner.os == 'Linux'
         run: |

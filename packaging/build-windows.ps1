@@ -59,9 +59,14 @@ if (-not $SkipBuild) {
     $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
     $unit = [string][char]0x1f
     $previous = $env:CARGO_ENCODED_RUSTFLAGS
+    #
+    # Setting this replaces .cargo/config.toml's flags rather than adding to
+    # them, so the static C runtime from there has to be repeated here.
     $env:CARGO_ENCODED_RUSTFLAGS = @(
         "--remap-path-prefix=$cargoHome=[cargo]"
         "--remap-path-prefix=$root=[snag]"
+        "-C"
+        "target-feature=+crt-static"
     ) -join $unit
 
     Push-Location $crate
