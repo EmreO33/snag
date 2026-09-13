@@ -89,6 +89,34 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
                 ui.add_space(10.0);
 
+                // Said here, before the download, rather than left for the
+                // failure to explain afterwards.
+                if app.ffmpeg_missing() {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        ui.label(
+                            egui::RichText::new(
+                                "ffmpeg is not installed, so merging and converting will fail. install it from",
+                            )
+                            .size(12.0)
+                            .color(p.warn),
+                        );
+                        if ui
+                            .add(
+                                egui::Label::new(
+                                    egui::RichText::new("updates").size(12.0).color(p.accent),
+                                )
+                                .sense(egui::Sense::click()),
+                            )
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .clicked()
+                        {
+                            app.view = View::Updates;
+                        }
+                    });
+                    ui.add_space(6.0);
+                }
+
                 // --- mode pills + actions ---------------------------------
                 ui.horizontal(|ui| {
                     let mut mode = app.mode;

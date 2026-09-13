@@ -79,6 +79,9 @@ pub struct SetupState {
     pub detecting: bool,
     pub found_ytdlp: Option<(String, String)>,
     pub found_ffmpeg: Option<String>,
+    /// Whether the ffmpeg probe has answered at all, so "None" can mean "not
+    /// found" rather than "not looked yet".
+    pub ffmpeg_checked: bool,
     pub install: InstallState,
     pub ffmpeg_install: InstallState,
     pub log: Vec<String>,
@@ -93,6 +96,7 @@ impl SetupState {
             detecting: true,
             found_ytdlp: None,
             found_ffmpeg: None,
+            ffmpeg_checked: false,
             install: InstallState::Idle,
             ffmpeg_install: InstallState::Idle,
             log: Vec::new(),
@@ -118,6 +122,9 @@ pub enum SetupEvent {
     },
     Install(InstallEvent),
     FfmpegInstall(InstallEvent),
+    /// A probe for ffmpeg alone, run at every launch and whenever the
+    /// configured path changes.
+    Ffmpeg(Option<String>),
 }
 
 /// State for the remux screen, which runs at most one ffmpeg job at a time.
@@ -373,6 +380,9 @@ impl SnagApp {
             app.start_detection(&cc.egui_ctx);
         } else {
             app.maybe_auto_check_updates(&cc.egui_ctx);
+            // ffmpeg used to be looked for only on first run, which left the
+            // rest of the app unable to say whether it was there at all.
+            app.refresh_ffmpeg(&cc.egui_ctx);
         }
         app
     }
@@ -962,6 +972,24 @@ impl SnagApp {
         });
     }
 
+    /// Look for ffmpeg again, off the UI thread.
+    pub fn refresh_ffmpeg(&mut self, ctx: &egui::Context) {
+        let configured = self.settings.advanced.ffmpeg_path.clone();
+        let tx = self.setup_tx.clone();
+        let repaint = Self::repainter(ctx);
+        std::thread::spawn(move || {
+            let found = crate::installer::detect_ffmpeg(&configured);
+            let _ = tx.send(SetupEvent::Ffmpeg(found));
+            repaint();
+        });
+    }
+
+    /// ffmpeg has been looked for and is not there. False while the probe is
+    /// still out, so nothing is flagged on a guess.
+    pub fn ffmpeg_missing(&self) -> bool {
+        self.setup.ffmpeg_checked && self.setup.found_ffmpeg.is_none()
+    }
+
     /// Download yt-dlp from its own GitHub releases into the config directory.
     pub fn start_ytdlp_install(&mut self, ctx: &egui::Context) {
         if self.setup.install.busy() {
@@ -1012,6 +1040,11 @@ impl SnagApp {
                     }
                     self.setup.found_ytdlp = ytdlp;
                     self.setup.found_ffmpeg = ffmpeg;
+                    self.setup.ffmpeg_checked = true;
+                }
+                SetupEvent::Ffmpeg(found) => {
+                    self.setup.found_ffmpeg = found;
+                    self.setup.ffmpeg_checked = true;
                 }
                 SetupEvent::Install(InstallEvent::Log(l)) => self.setup.log.push(l),
                 SetupEvent::FfmpegInstall(InstallEvent::Log(l)) => self.setup.log.push(l),
@@ -1320,7 +1353,7 @@ impl SnagApp {
         }
     }
 
-    fn autosave(&mut self) {
+    fn autosave(&mut self, ctx: &egui::Context) {
         if self.view == View::Setup {
             return;
         }
@@ -1330,7 +1363,14 @@ impl SnagApp {
         if let Some(t) = self.dirty_since {
             if t.elapsed().as_millis() > 600 {
                 match self.settings.save() {
-                    Ok(()) => self.saved_snapshot = self.settings.clone(),
+                    Ok(()) => {
+                        let path_changed = self.saved_snapshot.advanced.ffmpeg_path
+                            != self.settings.advanced.ffmpeg_path;
+                        self.saved_snapshot = self.settings.clone();
+                        if path_changed {
+                            self.refresh_ffmpeg(ctx);
+                        }
+                    }
                     Err(e) => self.toast(format!("could not save settings: {e}"), true),
                 }
                 self.dirty_since = None;
@@ -1394,7 +1434,7 @@ impl eframe::App for SnagApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
         self.handle_dropped_files(ctx);
-        self.autosave();
+        self.autosave(ctx);
 
         // Keep the clock ticking while anything is in flight, for speed/ETA text.
         if self.active_job_count() > 0 || self.remux.state == RemuxState::Running {

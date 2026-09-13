@@ -224,6 +224,79 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
             ui.add_space(10.0);
 
+            // --- ffmpeg -----------------------------------------------------
+            // Not something snag updates, but the one dependency people most
+            // often do not have, and this is the screen they look on when
+            // something is missing.
+            theme::section_title(ui, &p, "ffmpeg");
+            theme::card(ui, &p, |ui| {
+                ui.horizontal(|ui| {
+                    let missing = app.ffmpeg_missing();
+                    let checked = app.setup.ffmpeg_checked;
+                    let installing = app.setup.ffmpeg_install.busy();
+                    ui.vertical(|ui| {
+                        let (headline, color) = match (&app.setup.found_ffmpeg, checked) {
+                            (Some(v), _) => (format!("ffmpeg {v}"), p.text),
+                            (None, false) => ("ffmpeg".to_string(), p.text),
+                            (None, true) => ("ffmpeg not found".to_string(), p.bad),
+                        };
+                        ui.label(egui::RichText::new(headline).size(16.0).color(color).strong());
+                        ui.add_space(2.0);
+                        let (msg, color) = if installing {
+                            ("installing...".to_string(), p.dim)
+                        } else if !checked {
+                            ("looking...".to_string(), p.dim)
+                        } else if missing {
+                            (
+                                "needed to merge video with audio, convert audio, remux and clip. without it most downloads fail at the last step.".to_string(),
+                                p.warn,
+                            )
+                        } else {
+                            ("found. snag does not update ffmpeg; your package manager does.".to_string(), p.good)
+                        };
+                        ui.label(egui::RichText::new(msg).size(12.0).color(color));
+                    });
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        match crate::installer::ffmpeg_plan() {
+                            crate::installer::FfmpegPlan::Automatic { .. } => {
+                                if theme::action_button(ui, &p, "install ffmpeg", true, missing && !installing)
+                                    .clicked()
+                                {
+                                    app.start_ffmpeg_install(&ctx);
+                                }
+                            }
+                            crate::installer::FfmpegPlan::Manual { command } => {
+                                // Needs root here, which snag will not ask for,
+                                // so the command is handed over instead.
+                                if theme::action_button(ui, &p, "copy install command", true, missing)
+                                    .on_hover_text(&command)
+                                    .clicked()
+                                {
+                                    crate::util::set_clipboard_text(&command);
+                                    app.toast("command copied. run it in a terminal.", false);
+                                }
+                            }
+                        }
+                        if theme::action_button(ui, &p, "check", false, !installing).clicked() {
+                            app.refresh_ffmpeg(&ctx);
+                        }
+                    });
+                });
+
+                if app.setup.ffmpeg_install.busy() {
+                    ui.add_space(10.0);
+                    theme::progress_bar(ui, &p, 0.0, true);
+                }
+            });
+            if let crate::installer::FfmpegPlan::Manual { command } = crate::installer::ffmpeg_plan() {
+                if app.ffmpeg_missing() {
+                    theme::note_text(ui, &p, &format!("run: {command}"));
+                }
+            }
+
+            ui.add_space(10.0);
+
             // --- policy -----------------------------------------------------
             theme::section_title(ui, &p, "check for updates");
             let mut check = app.settings.updater.check;

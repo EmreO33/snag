@@ -8,6 +8,21 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.3.4
+
+- **ffmpeg has a place on the updates screen**, beside Snag and yt-dlp, with
+  its version, or "not found" and an install button when it is missing. On
+  Linux and macOS, where installing needs root, the button copies the package
+  manager command instead. A user asked for this: the installer existed but
+  only appeared during first-run setup, so anyone who skipped it then had no
+  way back to it.
+- **Snag says when ffmpeg is missing before you find out the hard way.** A
+  line on the save screen, a note on the remux screen with the run button
+  disabled, and a red "ffmpeg: not found" in the status bar that goes to the
+  installer when clicked. Previously the first sign was a failed download.
+- ffmpeg is now looked for at every launch and whenever its path is changed
+  in settings, not only during setup.
+
 ## 1.3.3
 
 - **Fixed: Snag would not start on a clean Windows.** Every Windows build so

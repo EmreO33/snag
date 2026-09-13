@@ -194,6 +194,22 @@ pub fn status_bar(app: &mut SnagApp, ctx: &egui::Context) {
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // A missing ffmpeg is worth a permanent word in the corner,
+                    // since it breaks the last step of nearly every download.
+                    if app.ffmpeg_missing()
+                        && ui
+                            .add(
+                                egui::Label::new(
+                                    egui::RichText::new("ffmpeg: not found").size(12.0).color(p.bad),
+                                )
+                                .sense(Sense::click()),
+                            )
+                            .on_hover_text("merging, converting, remuxing and clipping all need it. click to install.")
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .clicked()
+                    {
+                        app.view = View::Updates;
+                    }
                     let v = if app.ytdlp_version.is_empty() {
                         "yt-dlp: not found".to_string()
                     } else {

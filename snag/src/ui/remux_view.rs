@@ -269,6 +269,17 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
 
             ui.add_space(14.0);
 
+            if app.ffmpeg_missing() {
+                ui.label(
+                    egui::RichText::new(
+                        "everything on this screen is ffmpeg's work, and ffmpeg was not found. install it from updates.",
+                    )
+                    .size(12.0)
+                    .color(p.warn),
+                );
+                ui.add_space(10.0);
+            }
+
             // --- operation --------------------------------------------------
             theme::section_title(ui, &p, "operation");
             let mut op = app.remux.op;
@@ -368,8 +379,17 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             // --- run --------------------------------------------------------
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                let can_run = app.remux.input.is_some() && !running;
-                if theme::action_button(ui, &p, "run", true, can_run).clicked() {
+                let no_ffmpeg = app.ffmpeg_missing();
+                let can_run = app.remux.input.is_some() && !running && !no_ffmpeg;
+                let run = theme::action_button(ui, &p, "run", true, can_run);
+                let run = if no_ffmpeg {
+                    run.on_disabled_hover_text(
+                        "everything on this screen is ffmpeg's work, and ffmpeg was not found. install it from updates.",
+                    )
+                } else {
+                    run
+                };
+                if run.clicked() {
                     let ctx = ui.ctx().clone();
                     app.start_remux(&ctx);
                 }
