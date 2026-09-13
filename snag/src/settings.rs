@@ -239,6 +239,41 @@ choice_enum! {
 }
 
 choice_enum! {
+    /// What encodes video when a clip has to be re-encoded.
+    ///
+    /// Only the exact cut re-encodes; everything else snag does with ffmpeg
+    /// copies streams, and a gif is palette work no gpu helps with.
+    VideoEncoder {
+        Software => "software",
+        Nvidia => "nvidia",
+        Intel => "intel",
+        Amd => "amd",
+    }
+    default: Software
+}
+
+impl VideoEncoder {
+    /// The ffmpeg encoder this stands for, or None for the cpu.
+    pub fn ffmpeg_name(&self) -> Option<&'static str> {
+        match self {
+            VideoEncoder::Software => None,
+            VideoEncoder::Nvidia => Some("h264_nvenc"),
+            VideoEncoder::Intel => Some("h264_qsv"),
+            VideoEncoder::Amd => Some("h264_amf"),
+        }
+    }
+
+    pub fn hint(&self) -> &'static str {
+        match self {
+            VideoEncoder::Software => "the cpu, with x264. the smallest file for the quality, and the only one that works everywhere.",
+            VideoEncoder::Nvidia => "nvenc, on a geforce or quadro. much faster on most machines; the file comes out two to three times larger.",
+            VideoEncoder::Intel => "quick sync, on the intel graphics most laptops have. faster than a slow cpu, slower than a fast one.",
+            VideoEncoder::Amd => "amf, on a radeon. faster on most machines, larger files.",
+        }
+    }
+}
+
+choice_enum! {
     CookieBrowser {
         None => "none",
         Chrome => "chrome",
@@ -365,6 +400,9 @@ pub struct ProcessingSettings {
     pub keep_source_after_remux: bool,
     pub max_concurrent_jobs: usize,
     pub concurrent_fragments: u32,
+    /// What encodes an exact cut. Software unless someone chooses otherwise,
+    /// because it is the one that cannot fail for want of hardware.
+    pub video_encoder: VideoEncoder,
 }
 
 impl Default for ProcessingSettings {
@@ -377,6 +415,7 @@ impl Default for ProcessingSettings {
             keep_source_after_remux: true,
             max_concurrent_jobs: 2,
             concurrent_fragments: 4,
+            video_encoder: VideoEncoder::Software,
         }
     }
 }

@@ -3,7 +3,7 @@ use eframe::egui;
 use crate::app::{SettingsTab, SnagApp};
 use crate::settings::{
     Accent, AudioBitrate, AudioFormat, Container, CookieBrowser, Mode, Settings, ThemeMode,
-    VideoCodec, VideoQuality,
+    VideoCodec, VideoEncoder, VideoQuality,
 };
 use crate::theme;
 use crate::util;
@@ -510,6 +510,59 @@ fn processing(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         &p,
         "more fragments at once is faster on fast connections and rougher on slow ones.",
     );
+
+    theme::section_title(ui, &p, "video encoder");
+    theme::note_text(
+        ui,
+        &p,
+        "used when a clip is cut exactly, which is the one time snag re-encodes video. everything else copies the streams untouched.",
+    );
+    {
+        // Only what this ffmpeg was built with is offered. A build can still
+        // carry an encoder the machine cannot run, and that is explained when
+        // it happens rather than guessed at here.
+        let built_with = &app.setup.ffmpeg_encoders;
+        let mut chosen = app.settings.processing.video_encoder;
+        egui::Frame::none()
+            .fill(p.card)
+            .rounding(egui::Rounding::same(12.0))
+            .inner_margin(egui::Margin::same(4.0))
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing = egui::Vec2::new(4.0, 4.0);
+                ui.horizontal_wrapped(|ui| {
+                    for option in VideoEncoder::ALL {
+                        let available = match option.ffmpeg_name() {
+                            None => true,
+                            Some(name) => built_with.iter().any(|b| b == name),
+                        };
+                        let response =
+                            theme::pill(ui, &p, option.label(), chosen == *option, available);
+                        let response = if available {
+                            response.on_hover_text(option.hint())
+                        } else {
+                            response.on_disabled_hover_text(
+                                "this ffmpeg was not built with that encoder",
+                            )
+                        };
+                        if response.clicked() {
+                            chosen = *option;
+                        }
+                    }
+                });
+            });
+        if chosen != app.settings.processing.video_encoder {
+            app.settings.processing.video_encoder = chosen;
+            changed = true;
+        }
+    }
+    theme::note_text(ui, &p, app.settings.processing.video_encoder.hint());
+    if app.settings.processing.video_encoder != VideoEncoder::Software {
+        theme::note_text(
+            ui,
+            &p,
+            "if a cut fails with this encoder, the gpu or driver does not support it: come back here and pick software.",
+        );
+    }
 
     changed
 }

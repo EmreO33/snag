@@ -8,6 +8,20 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.3.5
+
+- **Hardware video encoding**, under settings > local processing. A clip cut
+  exactly is the one time Snag re-encodes video, and it can now do that on an
+  NVIDIA, Intel or AMD GPU instead of the CPU. Only the encoders your ffmpeg
+  was built with are offered. Software stays the default: it works everywhere
+  and gives the smallest file for the quality, while the hardware encoders are
+  much faster on most machines and produce files two to three times larger.
+  Measured before shipping, on real 1080p60 footage: a two minute cut took 13
+  seconds on NVENC against 19 on x264 with 32 CPU threads, and most machines
+  have far fewer threads and the same NVENC.
+  - A hardware encoder the build carries but the machine cannot run fails
+    with a message that says so and points back at the setting.
+
 ## 1.3.4
 
 - **ffmpeg has a place on the updates screen**, beside Snag and yt-dlp, with

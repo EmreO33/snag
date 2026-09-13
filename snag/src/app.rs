@@ -82,6 +82,8 @@ pub struct SetupState {
     /// Whether the ffmpeg probe has answered at all, so "None" can mean "not
     /// found" rather than "not looked yet".
     pub ffmpeg_checked: bool,
+    /// Hardware encoders the found ffmpeg was built with, by ffmpeg name.
+    pub ffmpeg_encoders: Vec<String>,
     pub install: InstallState,
     pub ffmpeg_install: InstallState,
     pub log: Vec<String>,
@@ -97,6 +99,7 @@ impl SetupState {
             found_ytdlp: None,
             found_ffmpeg: None,
             ffmpeg_checked: false,
+            ffmpeg_encoders: Vec::new(),
             install: InstallState::Idle,
             ffmpeg_install: InstallState::Idle,
             log: Vec::new(),
@@ -124,7 +127,7 @@ pub enum SetupEvent {
     FfmpegInstall(InstallEvent),
     /// A probe for ffmpeg alone, run at every launch and whenever the
     /// configured path changes.
-    Ffmpeg(Option<String>),
+    Ffmpeg(Option<String>, Vec<String>),
 }
 
 /// State for the remux screen, which runs at most one ffmpeg job at a time.
@@ -977,9 +980,15 @@ impl SnagApp {
         let configured = self.settings.advanced.ffmpeg_path.clone();
         let tx = self.setup_tx.clone();
         let repaint = Self::repainter(ctx);
+        let bin = self.settings.ffmpeg_bin();
         std::thread::spawn(move || {
             let found = crate::installer::detect_ffmpeg(&configured);
-            let _ = tx.send(SetupEvent::Ffmpeg(found));
+            let encoders = if found.is_some() {
+                crate::installer::ffmpeg_hw_encoders(&bin)
+            } else {
+                Vec::new()
+            };
+            let _ = tx.send(SetupEvent::Ffmpeg(found, encoders));
             repaint();
         });
     }
@@ -1041,9 +1050,15 @@ impl SnagApp {
                     self.setup.found_ytdlp = ytdlp;
                     self.setup.found_ffmpeg = ffmpeg;
                     self.setup.ffmpeg_checked = true;
+                    // The encoder list needs a second probe, which is cheap.
+                    if self.setup.found_ffmpeg.is_some() {
+                        let bin = self.settings.ffmpeg_bin();
+                        self.setup.ffmpeg_encoders = crate::installer::ffmpeg_hw_encoders(&bin);
+                    }
                 }
-                SetupEvent::Ffmpeg(found) => {
+                SetupEvent::Ffmpeg(found, encoders) => {
                     self.setup.found_ffmpeg = found;
+                    self.setup.ffmpeg_encoders = encoders;
                     self.setup.ffmpeg_checked = true;
                 }
                 SetupEvent::Install(InstallEvent::Log(l)) => self.setup.log.push(l),
@@ -1188,6 +1203,7 @@ impl SnagApp {
                 clip_start,
                 clip_end,
                 clip_exact: self.remux.clip_exact,
+                encoder: self.settings.processing.video_encoder,
             },
             self.settings.clone(),
             self.remux.child.clone(),

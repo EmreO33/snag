@@ -384,6 +384,26 @@ pub fn install_ffmpeg(tx: Sender<InstallEvent>, repaint: impl Fn() + Send + 'sta
 }
 
 /// Same idea for ffmpeg, which Snag needs but does not install.
+/// The hardware h264 encoders this ffmpeg was built with.
+///
+/// Built with is not the same as usable: a build can carry h264_amf on a
+/// machine with no amd card. That failure only shows at encode time, and is
+/// explained then. What this rules out is offering an encoder the binary
+/// cannot even name.
+pub fn ffmpeg_hw_encoders(bin: &str) -> Vec<String> {
+    let Ok(out) = util::run_capture(bin, &["-hide_banner", "-encoders"]) else {
+        return Vec::new();
+    };
+    ["h264_nvenc", "h264_qsv", "h264_amf"]
+        .iter()
+        .filter(|name| {
+            out.lines()
+                .any(|line| line.split_whitespace().nth(1) == Some(name))
+        })
+        .map(|name| name.to_string())
+        .collect()
+}
+
 pub fn detect_ffmpeg(configured: &str) -> Option<String> {
     let configured = configured.trim();
     let mut candidates = Vec::new();
