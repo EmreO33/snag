@@ -104,7 +104,7 @@ when a file named `portable.txt` sits next to the executable (the portable zip
 ships one), or when it is started with `--portable`. In that mode the settings
 file and any Snag-installed yt-dlp live in `<folder>/data` instead of
 `%APPDATA%\Snag\config`, and nothing outside the folder is touched, except the
-registry key above when notifications are on. Delete the marker file and it
+Start Menu shortcut above when notifications are on. Delete the marker file and it
 reverts to the normal behaviour.
 
 ## First run
@@ -158,10 +158,11 @@ hidden, minimised or behind another window says so with a desktop
 notification. In front, the message in the corner is enough. Off in
 **settings &rarr; background** if you would rather not.
 
-On Windows, a notification is only shown for an app Windows has been
-introduced to, so Snag writes one key for itself under `HKCU\Software\Classes\AppUserModelId`
-at startup, the same thing Spotify and the rest do. Turning notifications off
-removes it, and so does the uninstaller.
+On Windows, a notification is only shown for an app that has a Start Menu
+shortcut carrying its app id, the same thing Discord, Chrome and every Electron
+app keep for themselves. The installer's shortcuts carry it; a Scoop copy
+stamps the shortcut Scoop made; a portable copy keeps one shortcut of its own
+in your Start Menu, and turning notifications off removes it.
 
 **youtube sign-in** &mdash; for age restricted, private and members-only videos.
 

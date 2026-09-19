@@ -627,7 +627,7 @@ fn background(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
             ui,
             &p,
             if crate::bootstrap::is_portable() {
-                "windows shows notifications only from apps it has been introduced to, so with this on, snag writes one key for itself under your user's registry hive. that is the one thing a portable copy puts outside its own folder, and turning this off removes it."
+                "windows shows notifications only from apps with a start menu shortcut carrying their name, so with this on, snag keeps one shortcut to itself in your start menu. that is the one thing a portable copy puts outside its own folder, and turning this off removes it."
             } else {
                 "if nothing appears, check that snag is allowed under windows settings > notifications, and that focus assist is not holding everything back."
             },

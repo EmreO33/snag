@@ -100,11 +100,16 @@ fn notify_test_and_exit() -> bool {
         return false;
     }
     notify::register();
+    // A shortcut made just now takes the shell a moment to notice.
+    std::thread::sleep(std::time::Duration::from_secs(2));
     let ok = notify::send(
         "Download finished",
         "This is what a finished download looks like.",
         true,
     );
+    // Windows drops a toast whose sender is gone before it is drawn, so this
+    // stays alive long enough to be one.
+    std::thread::sleep(std::time::Duration::from_secs(3));
     println!(
         "notification accepted by the desktop: {ok}{}",
         if ok {

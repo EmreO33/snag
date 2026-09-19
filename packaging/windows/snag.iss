@@ -77,7 +77,8 @@ Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon; AppUserModelID: "{#AppUserModelID}"
 
 [Registry]
-; Written by Snag at runtime; listed here so uninstalling takes it away.
+; Snag 1.3.7 wrote this key believing it registered notifications. It did
+; not, and later versions do not write it, but an uninstall clears it.
 Root: HKCU; Subkey: "Software\Classes\AppUserModelId\{#AppUserModelID}"; Flags: uninsdeletekey dontcreatekey
 
 [Run]

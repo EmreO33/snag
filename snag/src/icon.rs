@@ -5,9 +5,8 @@
 //! colour. The in-app mark is the bare white logo, which the UI tints with the
 //! current theme's text colour.
 
-/// The launcher icon: the mark on its own background. Also written out as a
-/// file for Windows notifications, which want one.
-pub const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
+/// The launcher icon: the mark on its own background.
+const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
 
 /// The bare mark, drawn inside the app and tinted at runtime.
 const MARK_PNG: &[u8] = include_bytes!("../../assets/logo-mark.png");

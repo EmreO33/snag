@@ -8,6 +8,21 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.3.8
+
+- **Notifications on Windows, for real this time.** 1.3.7 registered Snag
+  the way the documentation describes, with a registry key, and this
+  Windows 11 ignores that: a toast sent under that id is filed in the
+  notification centre and never drawn. What Windows does honour is a Start
+  Menu shortcut carrying the app id, which is what Discord, Chrome and every
+  Electron app keep for themselves. So now the installer's shortcuts carry
+  it, a Scoop copy stamps the shortcut Scoop made, and a portable copy keeps
+  one shortcut of its own in your Start Menu (removed when notifications are
+  turned off). Verified by eye this time, not by asking the database.
+- `snag --notify-test` waits a moment before and after sending, because a
+  shortcut made just now takes the shell a beat to notice, and a toast whose
+  sender has already exited is dropped. Both were hiding the real result.
+
 ## 1.3.7
 
 - **Notifications on Windows work now.** They never did: Windows only shows a
