@@ -351,6 +351,64 @@ pub fn toggle(ui: &mut Ui, p: &Palette, on: &mut bool) -> Response {
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
+/// A ticked box with a label after it, for lists where a switch per row
+/// would be too heavy. The whole row is the click target.
+pub fn checkbox(ui: &mut Ui, p: &Palette, on: &mut bool, label: &str) -> Response {
+    let box_size = 16.0;
+    let text = egui::RichText::new(label).size(12.5).color(p.text);
+    let galley = egui::WidgetText::from(text).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Truncate),
+        ui.available_width() - box_size - 8.0,
+        egui::TextStyle::Body,
+    );
+    let height = galley.size().y.max(box_size) + 6.0;
+    let (rect, mut response) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::click());
+    if response.clicked() {
+        *on = !*on;
+        response.mark_changed();
+    }
+
+    if ui.is_rect_visible(rect) {
+        if response.hovered() {
+            ui.painter().rect_filled(rect, Rounding::same(6.0), p.card);
+        }
+        let box_rect = egui::Rect::from_center_size(
+            egui::pos2(rect.left() + box_size * 0.5 + 2.0, rect.center().y),
+            Vec2::splat(box_size),
+        );
+        if *on {
+            ui.painter()
+                .rect_filled(box_rect, Rounding::same(4.0), p.accent);
+            // The tick.
+            let c = box_rect.center();
+            ui.painter().line_segment(
+                [egui::pos2(c.x - 4.0, c.y), egui::pos2(c.x - 1.0, c.y + 3.0)],
+                Stroke::new(2.0_f32, p.on_accent),
+            );
+            ui.painter().line_segment(
+                [
+                    egui::pos2(c.x - 1.0, c.y + 3.0),
+                    egui::pos2(c.x + 4.5, c.y - 3.5),
+                ],
+                Stroke::new(2.0_f32, p.on_accent),
+            );
+        } else {
+            ui.painter()
+                .rect_stroke(box_rect, Rounding::same(4.0), Stroke::new(1.0_f32, p.line));
+        }
+        let text_pos = egui::pos2(
+            box_rect.right() + 8.0,
+            rect.center().y - galley.size().y * 0.5,
+        );
+        ui.painter().galley(text_pos, galley, p.text);
+    }
+
+    announce_selected(&response, egui::WidgetType::Checkbox, true, *on, label);
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 /// A labelled toggle row: title on the left, switch on the right, note beneath.
 pub fn toggle_row(ui: &mut Ui, p: &Palette, title: &str, note: &str, on: &mut bool) -> bool {
     let mut changed = false;

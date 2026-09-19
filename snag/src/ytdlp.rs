@@ -146,7 +146,7 @@ fn dubbed_audio(s: &Settings) -> Option<String> {
 }
 
 /// Build the `-f` format selector for a mode.
-fn format_selector(mode: Mode, overrides: JobOverrides, s: &Settings) -> String {
+fn format_selector(mode: Mode, overrides: &JobOverrides, s: &Settings) -> String {
     let mut filters = String::new();
     if let Some(h) = overrides.height.or_else(|| s.video.quality.height()) {
         filters.push_str(&format!("[height<={h}]"));
@@ -173,7 +173,7 @@ fn format_selector(mode: Mode, overrides: JobOverrides, s: &Settings) -> String 
 }
 
 /// Build the `-S` format sort, which is what actually steers codec preference.
-fn format_sort(mode: Mode, overrides: JobOverrides, s: &Settings) -> Option<String> {
+fn format_sort(mode: Mode, overrides: &JobOverrides, s: &Settings) -> Option<String> {
     let mut tokens: Vec<String> = Vec::new();
 
     match mode {
@@ -252,7 +252,15 @@ pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) 
         push(&mut a, "--no-overwrites");
     }
     // An explicit choice for this download beats the global preference.
-    if overrides.whole_playlist || !s.advanced.ignore_playlists {
+    if let Some(items) = overrides
+        .playlist_items
+        .as_deref()
+        .filter(|i| !i.is_empty())
+    {
+        push(&mut a, "--yes-playlist");
+        push(&mut a, "--playlist-items");
+        push(&mut a, items);
+    } else if overrides.whole_playlist || !s.advanced.ignore_playlists {
         push(&mut a, "--yes-playlist");
     } else {
         push(&mut a, "--no-playlist");
@@ -260,8 +268,8 @@ pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) 
 
     // --- format selection ---------------------------------------------------
     push(&mut a, "-f");
-    a.push(format_selector(mode, overrides, s));
-    if let Some(sort) = format_sort(mode, overrides, s) {
+    a.push(format_selector(mode, &overrides, s));
+    if let Some(sort) = format_sort(mode, &overrides, s) {
         push(&mut a, "-S");
         a.push(sort);
     }
@@ -470,6 +478,33 @@ pub fn explain_error(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn picked_playlist_items_are_asked_for_by_position() {
+        use super::*;
+        let s = Settings::default();
+        let picked = JobOverrides {
+            playlist_items: Some("2,5-7".to_string()),
+            ..Default::default()
+        };
+        let args = build_args("https://example.test/list", Mode::Auto, picked, &s);
+        let at = args
+            .iter()
+            .position(|a| a == "--playlist-items")
+            .expect("asks by position");
+        assert_eq!(args[at + 1], "2,5-7");
+        assert!(args.contains(&"--yes-playlist".to_string()));
+        assert!(!args.contains(&"--no-playlist".to_string()));
+
+        // Without a pick, the default is still to leave a playlist alone.
+        let plain = build_args(
+            "https://example.test/list",
+            Mode::Auto,
+            JobOverrides::default(),
+            &s,
+        );
+        assert!(plain.contains(&"--no-playlist".to_string()));
+    }
+
     use super::*;
 
     #[test]
@@ -491,17 +526,17 @@ mod tests {
         let mut s = Settings::default();
         s.audio.dub_language = "es".into();
 
-        let auto = format_selector(Mode::Auto, JobOverrides::default(), &s);
+        let auto = format_selector(Mode::Auto, &JobOverrides::default(), &s);
         assert!(auto.starts_with("bv*[height<=1080]"), "got: {auto}");
         assert!(auto.contains("+ba[language^=es]"), "got: {auto}");
         // And still downloads a video that has no spanish track.
         assert!(auto.contains("/bv*+ba/b"), "got: {auto}");
 
-        let audio = format_selector(Mode::Audio, JobOverrides::default(), &s);
+        let audio = format_selector(Mode::Audio, &JobOverrides::default(), &s);
         assert_eq!(audio, "ba[language^=es]/bestaudio/best");
 
         // Muted video has no audio to pick a language for.
-        let mute = format_selector(Mode::Mute, JobOverrides::default(), &s);
+        let mute = format_selector(Mode::Mute, &JobOverrides::default(), &s);
         assert!(!mute.contains("language"), "got: {mute}");
     }
 
@@ -509,23 +544,23 @@ mod tests {
     fn no_dub_leaves_the_selector_as_it_was() {
         let s = Settings::default();
         assert_eq!(
-            format_selector(Mode::Audio, JobOverrides::default(), &s),
+            format_selector(Mode::Audio, &JobOverrides::default(), &s),
             "bestaudio/best"
         );
-        assert!(!format_selector(Mode::Auto, JobOverrides::default(), &s).contains("language"));
+        assert!(!format_selector(Mode::Auto, &JobOverrides::default(), &s).contains("language"));
     }
 
     #[test]
     fn a_language_code_cannot_break_out_of_the_selector() {
         let mut s = Settings::default();
         s.audio.dub_language = "es]+bv*[height<=144".into();
-        let selector = format_selector(Mode::Audio, JobOverrides::default(), &s);
+        let selector = format_selector(Mode::Audio, &JobOverrides::default(), &s);
         assert_eq!(selector, "ba[language^=esbvheight144]/bestaudio/best");
 
         // Punctuation on its own is not a language, so it is ignored.
         s.audio.dub_language = "][".into();
         assert_eq!(
-            format_selector(Mode::Audio, JobOverrides::default(), &s),
+            format_selector(Mode::Audio, &JobOverrides::default(), &s),
             "bestaudio/best"
         );
     }

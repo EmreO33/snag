@@ -20,6 +20,18 @@ use crate::ui;
 use crate::updater::{self, UpdateEvent, UpdateState};
 use crate::youtube::SignInState;
 
+/// How much of a playlist link to take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PlaylistChoice {
+    /// Only the linked item, which is what yt-dlp does by default.
+    #[default]
+    One,
+    /// Everything in it.
+    All,
+    /// The items ticked in the list.
+    Pick,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum View {
     Setup,
@@ -223,7 +235,11 @@ pub struct SnagApp {
     url_changed_at: Option<Instant>,
     probe_tx: Sender<ProbeResult>,
     probe_rx: Receiver<ProbeResult>,
-    pub whole_playlist: bool,
+    /// What to take from a playlist link: the linked item, all of them, or
+    /// the ones ticked in `playlist_picks`.
+    pub playlist_choice: PlaylistChoice,
+    /// Playlist positions ticked for a pick, counted from one.
+    pub playlist_picks: std::collections::BTreeSet<usize>,
     pub height_override: Option<u32>,
     /// The preview image for the link in the box, keyed by the url it came
     /// from so a late arrival for an older link is ignored.
@@ -335,7 +351,8 @@ impl SnagApp {
             url_changed_at: None,
             probe_tx,
             probe_rx,
-            whole_playlist: false,
+            playlist_choice: PlaylistChoice::One,
+            playlist_picks: Default::default(),
             height_override: None,
             thumbnail: None,
             thumb_tx,
@@ -476,7 +493,8 @@ impl SnagApp {
             return;
         }
         self.probed_url = url.clone();
-        self.whole_playlist = false;
+        self.playlist_choice = PlaylistChoice::One;
+        self.playlist_picks.clear();
         self.height_override = None;
         self.thumbnail = None;
 
@@ -569,14 +587,64 @@ impl SnagApp {
             .filter(|l| !l.is_empty())
             .collect();
 
+        // Picked playlist items become their own downloads, one each, so
+        // they sit in the queue like anything else: separately cancellable,
+        // separately retried, separately remembered. An item the listing
+        // gave no link for is asked for by its position instead, and those
+        // share one download of the playlist link.
+        let picked: Vec<crate::probe::Entry> = match (self.playlist_choice, self.current_probe()) {
+            (PlaylistChoice::Pick, Some(probe)) if urls.len() == 1 => probe
+                .entries
+                .iter()
+                .filter(|e| self.playlist_picks.contains(&e.index))
+                .cloned()
+                .collect(),
+            _ => Vec::new(),
+        };
+        if self.playlist_choice == PlaylistChoice::Pick && picked.is_empty() {
+            self.toast("tick at least one item, or take all of them", true);
+            return;
+        }
+
         let mut queued = 0;
         for url in urls {
             if !crate::util::looks_like_url(&url) {
                 self.toast(format!("not a link: {url}"), true);
                 continue;
             }
+            if !picked.is_empty() {
+                let mut by_position = Vec::new();
+                for entry in &picked {
+                    match &entry.url {
+                        Some(link) => {
+                            let overrides = JobOverrides {
+                                height: self.height_override,
+                                ..Default::default()
+                            };
+                            let mut job = Job::new(link.clone(), self.mode, overrides);
+                            // The listing already knows the title; no sense
+                            // showing a bare link until yt-dlp repeats it.
+                            job.title = entry.title.clone();
+                            self.jobs.push(job);
+                            queued += 1;
+                        }
+                        None => by_position.push(entry.index),
+                    }
+                }
+                if !by_position.is_empty() {
+                    let overrides = JobOverrides {
+                        playlist_items: Some(crate::jobs::playlist_items_spec(&by_position)),
+                        height: self.height_override,
+                        ..Default::default()
+                    };
+                    self.jobs.push(Job::new(url, self.mode, overrides));
+                    queued += 1;
+                }
+                continue;
+            }
             let overrides = JobOverrides {
-                whole_playlist: self.whole_playlist,
+                whole_playlist: self.playlist_choice == PlaylistChoice::All,
+                playlist_items: None,
                 height: self.height_override,
             };
             self.jobs.push(Job::new(url, self.mode, overrides));
@@ -587,7 +655,8 @@ impl SnagApp {
             self.url_input.clear();
             self.probe = ProbeState::Idle;
             self.probed_url.clear();
-            self.whole_playlist = false;
+            self.playlist_choice = PlaylistChoice::One;
+            self.playlist_picks.clear();
             self.height_override = None;
             self.toast(
                 if queued == 1 {
@@ -633,7 +702,7 @@ impl SnagApp {
                     job.id,
                     job.url.clone(),
                     job.mode,
-                    job.overrides,
+                    job.overrides.clone(),
                     self.settings.clone(),
                     job.child.clone(),
                     job.cancel_flag.clone(),

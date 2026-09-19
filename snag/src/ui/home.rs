@@ -1,7 +1,7 @@
 use eframe::egui;
 use egui::{Key, Rounding, Vec2};
 
-use crate::app::{SnagApp, View};
+use crate::app::{PlaylistChoice, SnagApp, View};
 use crate::jobs::JobState;
 use crate::settings::Mode;
 use crate::theme;
@@ -11,6 +11,14 @@ use crate::util;
 const SUPPORTED_SITES_URL: &str = "https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md";
 
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
+    // The page grew a playlist picker and a recent list under the link box,
+    // either of which can run past the bottom of a small window.
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| page(app, ui));
+}
+
+fn page(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
     let logo = app.logo.clone();
     let full_width = ui.available_width();
@@ -336,16 +344,48 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("take").size(12.0).color(p.dim));
-                let mut whole = app.whole_playlist;
-                if theme::pill(ui, p, "just this one", !whole, true).clicked() {
-                    whole = false;
+                let mut choice = app.playlist_choice;
+                if theme::pill(ui, p, "just this one", choice == PlaylistChoice::One, true)
+                    .clicked()
+                {
+                    choice = PlaylistChoice::One;
                 }
                 let count = probe.playlist_items.unwrap_or(0);
-                if theme::pill(ui, p, &format!("all {count}"), whole, true).clicked() {
-                    whole = true;
+                if theme::pill(
+                    ui,
+                    p,
+                    &format!("all {count}"),
+                    choice == PlaylistChoice::All,
+                    true,
+                )
+                .clicked()
+                {
+                    choice = PlaylistChoice::All;
                 }
-                app.whole_playlist = whole;
+                // Picking needs the items, which a listing that only counted
+                // them cannot offer.
+                let can_pick = !probe.entries.is_empty();
+                let picked = app.playlist_picks.len();
+                let label = if choice == PlaylistChoice::Pick && picked > 0 {
+                    format!("pick ({picked})")
+                } else {
+                    "pick".to_string()
+                };
+                if theme::pill(ui, p, &label, choice == PlaylistChoice::Pick, can_pick)
+                    .on_disabled_hover_text(
+                        "this site listed how many items there are, but not which",
+                    )
+                    .clicked()
+                {
+                    choice = PlaylistChoice::Pick;
+                }
+                app.playlist_choice = choice;
             });
+
+            if app.playlist_choice == PlaylistChoice::Pick {
+                ui.add_space(8.0);
+                playlist_picker(app, ui, p, &probe.entries);
+            }
         }
 
         // Only offer qualities the site actually has.
@@ -368,6 +408,64 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
             });
         }
     });
+}
+
+/// The playlist's items with a box each, for taking some and not others.
+fn playlist_picker(
+    app: &mut SnagApp,
+    ui: &mut egui::Ui,
+    p: &theme::Palette,
+    entries: &[crate::probe::Entry],
+) {
+    ui.horizontal(|ui| {
+        let picked = app.playlist_picks.len();
+        ui.label(
+            egui::RichText::new(format!("{picked} of {} picked", entries.len()))
+                .size(12.0)
+                .color(p.dim),
+        );
+        if theme::pill(ui, p, "all", false, picked < entries.len()).clicked() {
+            app.playlist_picks = entries.iter().map(|e| e.index).collect();
+        }
+        if theme::pill(ui, p, "none", false, picked > 0).clicked() {
+            app.playlist_picks.clear();
+        }
+    });
+    ui.add_space(4.0);
+
+    // Tall enough for a handful, scrolling for a hundred, and never so tall
+    // that the download button leaves the screen.
+    egui::Frame::none()
+        .fill(p.well)
+        .rounding(egui::Rounding::same(10.0))
+        .inner_margin(egui::Margin::symmetric(6.0, 4.0))
+        .show(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .max_height(260.0)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    for entry in entries {
+                        let mut on = app.playlist_picks.contains(&entry.index);
+                        let title = if entry.title.is_empty() {
+                            format!("item {}", entry.index)
+                        } else {
+                            entry.title.clone()
+                        };
+                        let mut label = format!("{}.  {}", entry.index, title);
+                        if let Some(d) = entry.duration_label() {
+                            label.push_str(&format!("   {d}"));
+                        }
+                        if theme::checkbox(ui, p, &mut on, &label).changed() {
+                            if on {
+                                app.playlist_picks.insert(entry.index);
+                            } else {
+                                app.playlist_picks.remove(&entry.index);
+                            }
+                        }
+                    }
+                });
+        });
 }
 
 /// The strip that appears when clipboard watching spots a link. Deliberately

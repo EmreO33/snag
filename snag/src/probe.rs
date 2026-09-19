@@ -10,6 +10,24 @@ use std::sync::mpsc::Sender;
 use crate::settings::Settings;
 use crate::util;
 
+/// One item of a playlist, as the flat listing describes it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Entry {
+    /// Position in the playlist, counted from one, as yt-dlp counts.
+    pub index: usize,
+    pub title: String,
+    pub duration: Option<f64>,
+    /// The item's own link, when the site gives one. Without it the item can
+    /// still be had by asking for the playlist's nth entry.
+    pub url: Option<String>,
+}
+
+impl Entry {
+    pub fn duration_label(&self) -> Option<String> {
+        self.duration.filter(|d| *d > 0.0).map(util::human_eta)
+    }
+}
+
 /// What a link turned out to be.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Probe {
@@ -19,6 +37,9 @@ pub struct Probe {
     pub duration: Option<f64>,
     /// Item count when the link is a playlist.
     pub playlist_items: Option<usize>,
+    /// The items themselves, when the link is a playlist, so they can be
+    /// picked from rather than taken all or one.
+    pub entries: Vec<Entry>,
     /// Distinct video heights the site offers, tallest first.
     pub heights: Vec<u32>,
     pub live: bool,
@@ -70,6 +91,36 @@ fn parse(url: &str, json: &serde_json::Value) -> Probe {
         None
     };
 
+    // A flat listing gives each item's title, length and link, and nothing
+    // more. The position is its own count: yt-dlp leaves playlist_index
+    // empty in a flat listing, and --playlist-items counts from one.
+    let entries: Vec<Entry> = if is_playlist {
+        json.get("entries")
+            .and_then(|e| e.as_array())
+            .map(|list| {
+                list.iter()
+                    .enumerate()
+                    .map(|(i, e)| Entry {
+                        index: i + 1,
+                        title: e
+                            .get("title")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        duration: e.get("duration").and_then(|d| d.as_f64()),
+                        url: e
+                            .get("url")
+                            .and_then(|u| u.as_str())
+                            .filter(|u| u.starts_with("http"))
+                            .map(str::to_string),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
     // Heights are only meaningful for a single video: a flat playlist listing
     // carries no format information.
     let mut heights: Vec<u32> = json
@@ -100,6 +151,7 @@ fn parse(url: &str, json: &serde_json::Value) -> Probe {
             .map(str::to_string),
         duration: json.get("duration").and_then(|d| d.as_f64()),
         playlist_items,
+        entries,
         heights,
         live: json
             .get("is_live")
@@ -237,6 +289,25 @@ mod tests {
         let p = parse("https://example.test/list", &json);
         assert!(p.is_playlist());
         assert_eq!(p.playlist_items, Some(40));
+    }
+
+    #[test]
+    fn keeps_the_items_of_a_playlist_in_order() {
+        let json = serde_json::json!({
+            "_type": "playlist",
+            "entries": [
+                {"title": "one", "url": "https://example.test/1", "duration": 60},
+                {"title": "two", "url": "https://example.test/2"},
+                {"title": "three"}
+            ]
+        });
+        let p = parse("https://example.test/list", &json);
+        assert_eq!(p.entries.len(), 3);
+        assert_eq!(p.entries[0].index, 1);
+        assert_eq!(p.entries[0].duration_label().as_deref(), Some("1:00"));
+        assert_eq!(p.entries[1].url.as_deref(), Some("https://example.test/2"));
+        assert_eq!(p.entries[2].index, 3);
+        assert!(p.entries[2].url.is_none(), "no link is not a fake link");
     }
 
     #[test]

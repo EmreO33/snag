@@ -105,13 +105,38 @@ pub struct Job {
 }
 
 /// Choices that apply to one download rather than to every download.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct JobOverrides {
     /// Take the whole playlist rather than just the linked item.
     pub whole_playlist: bool,
+    /// Take only these items of the playlist, in yt-dlp's own notation
+    /// ("1,3,5-7"). Used for items the listing gave no link of their own.
+    pub playlist_items: Option<String>,
     /// Cap this download at a specific height, whatever the settings say.
     pub height: Option<u32>,
+}
+
+/// Write picked positions the way `--playlist-items` reads them, with runs
+/// collapsed: 1, 2, 3, 5, 7, 8 becomes "1-3,5,7-8".
+pub fn playlist_items_spec(sorted: &[usize]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < sorted.len() {
+        let start = sorted[i];
+        let mut end = start;
+        while i + 1 < sorted.len() && sorted[i + 1] == end + 1 {
+            i += 1;
+            end = sorted[i];
+        }
+        parts.push(if start == end {
+            start.to_string()
+        } else {
+            format!("{start}-{end}")
+        });
+        i += 1;
+    }
+    parts.join(",")
 }
 
 impl Job {
@@ -361,7 +386,7 @@ pub fn to_save(jobs: &[Job]) -> Vec<Saved> {
         .map(|j| Saved {
             url: j.url.clone(),
             mode: j.mode,
-            overrides: j.overrides,
+            overrides: j.overrides.clone(),
             title: j.title.clone(),
         })
         .collect()
@@ -402,6 +427,15 @@ impl Job {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn playlist_items_collapse_into_ranges() {
+        use super::playlist_items_spec as spec;
+        assert_eq!(spec(&[1, 2, 3, 5, 7, 8]), "1-3,5,7-8");
+        assert_eq!(spec(&[4]), "4");
+        assert_eq!(spec(&[2, 3]), "2-3");
+        assert_eq!(spec(&[]), "");
+    }
+
     use super::*;
 
     #[test]
@@ -431,6 +465,7 @@ mod tests {
             overrides: JobOverrides {
                 whole_playlist: true,
                 height: Some(720),
+                ..Default::default()
             },
             title: "something".into(),
         });

@@ -8,6 +8,17 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.4.0
+
+- **Pick from a playlist.** Paste a playlist and, next to "just this one"
+  and "all", there is now "pick": the items are listed with their titles
+  and lengths, you tick the ones you want, and each becomes its own download
+  in the queue, separately cancellable, retried and remembered. "all" and
+  "none" buttons for the long ones. A site that only counts its items
+  without naming them offers the first two choices as before.
+- The save page scrolls now, so a long list of picks or a long recent list
+  never pushes the download button off the bottom of a small window.
+
 ## 1.3.8
 
 - **Notifications on Windows, for real this time.** 1.3.7 registered Snag

@@ -140,8 +140,9 @@ override the quality for one download without touching your settings.
 | `mute` | video only, audio track dropped |
 
 Paste several links at once (one per line) and they all queue up. Paste a
-**playlist** and Snag says how many items it holds and asks whether you want
-just the one you linked or all of them &mdash; rather than silently taking one.
+**playlist** and Snag lists what it holds and asks whether you want just the
+one you linked, all of them, or a pick: tick the items you want and each one
+queues as its own download.
 
 **queue** &mdash; live progress, speed, ETA and size per job, with cancel, retry,
 open, show-in-folder, copy-link and a per-job log. Runs several downloads at
