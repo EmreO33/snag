@@ -8,7 +8,7 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
-## 1.4.0
+## 1.4.0 - The Movie Update
 
 - **Pick from a playlist.** Paste a playlist and, next to "just this one"
   and "all", there is now "pick": the items are listed with their titles
