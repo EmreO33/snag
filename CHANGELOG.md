@@ -8,6 +8,15 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.4.1
+
+- The ffmpeg card on the updates screen says "ffmpeg 9.0.1" rather than
+  quoting ffmpeg's whole two-line banner, copyright notice and all.
+- Its "check" button could not be clicked: the long text took the whole
+  width of the card, and the buttons were laid out in the nothing left over,
+  where clicks do not land. The text now stops short of the buttons, on
+  both this card and the yt-dlp one.
+
 ## 1.4.0 - The Movie Update
 
 - **Pick from a playlist.** Paste a playlist and, next to "just this one"

@@ -7,6 +7,9 @@ use crate::theme;
 use crate::updater::UpdateState;
 use crate::util;
 
+/// Room kept on the right of a card for its two buttons.
+const BUTTONS_WIDTH: f32 = 300.0;
+
 pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
     let ctx = ui.ctx().clone();
@@ -145,7 +148,12 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             // --- current state ---------------------------------------------
             theme::card(ui, &p, |ui| {
                 ui.horizontal(|ui| {
+                    // The text column stops short of the buttons. Without
+                    // this a long line takes the whole width, the buttons get
+                    // laid out in nothing, and nothing is what clicks hit.
+                    let text_width = ui.available_width() - BUTTONS_WIDTH;
                     ui.vertical(|ui| {
+                        ui.set_max_width(text_width);
                         let version = if app.ytdlp_version.is_empty() {
                             "not found".to_string()
                         } else {
@@ -249,7 +257,9 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                     let missing = app.ffmpeg_missing();
                     let checked = app.setup.ffmpeg_checked;
                     let installing = app.setup.ffmpeg_install.busy();
+                    let text_width = ui.available_width() - BUTTONS_WIDTH;
                     ui.vertical(|ui| {
+                        ui.set_max_width(text_width);
                         let (headline, color) = match (&app.setup.found_ffmpeg, checked) {
                             (Some(v), _) => (format!("ffmpeg {v}"), p.text),
                             (None, false) => ("ffmpeg".to_string(), p.text),

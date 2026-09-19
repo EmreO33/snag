@@ -538,6 +538,29 @@ pub fn ffmpeg_hw_encoders(bin: &str) -> Vec<String> {
         .collect()
 }
 
+/// Just the number out of ffmpeg's banner line, which otherwise reads
+/// "ffmpeg version 9.0.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the
+/// FFmpeg developers" and takes two lines of a card to say "9.0.1".
+fn ffmpeg_version_number(banner: &str) -> String {
+    let after = banner
+        .split_once("version ")
+        .map(|(_, rest)| rest)
+        .unwrap_or(banner);
+    let token = after.split_whitespace().next().unwrap_or(after);
+    // The number ends where the build's own tag begins: "9.0.1-full_build",
+    // "n7.1", "N-118000-gabcdef" are all things ffmpeg calls a version.
+    let number: String = token
+        .trim_start_matches('n')
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    if number.is_empty() {
+        token.to_string()
+    } else {
+        number
+    }
+}
+
 pub fn detect_ffmpeg(configured: &str) -> Option<String> {
     let configured = configured.trim();
     let mut candidates = Vec::new();
@@ -563,7 +586,7 @@ pub fn detect_ffmpeg(configured: &str) -> Option<String> {
     for bin in candidates {
         if let Ok(out) = util::run_capture(&bin, &["-version"]) {
             if let Some(first) = out.lines().next() {
-                return Some(first.trim().to_string());
+                return Some(ffmpeg_version_number(first));
             }
         }
     }
@@ -572,6 +595,18 @@ pub fn detect_ffmpeg(configured: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ffmpeg_banner_becomes_a_number() {
+        use super::ffmpeg_version_number as v;
+        assert_eq!(v("ffmpeg version 9.0.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"), "9.0.1");
+        assert_eq!(v("ffmpeg version n7.1 Copyright (c) 2000-2024"), "7.1");
+        assert_eq!(v("ffmpeg version 6.1.1-3ubuntu5 Copyright"), "6.1.1");
+        assert_eq!(
+            v("ffmpeg version N-118000-gabcdef Copyright"),
+            "N-118000-gabcdef"
+        );
+    }
+
     /// The real installer against real github: yt-dlp and then deno into a
     /// scratch folder, both verified by running them. Network, hence ignored.
     #[test]
