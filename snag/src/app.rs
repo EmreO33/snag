@@ -84,6 +84,8 @@ pub struct SetupState {
     pub ffmpeg_checked: bool,
     /// Hardware encoders the found ffmpeg was built with, by ffmpeg name.
     pub ffmpeg_encoders: Vec<String>,
+    /// The deno snag installed beside yt-dlp, by version, if it is there.
+    pub deno_version: Option<String>,
     pub install: InstallState,
     pub ffmpeg_install: InstallState,
     pub log: Vec<String>,
@@ -100,6 +102,7 @@ impl SetupState {
             found_ffmpeg: None,
             ffmpeg_checked: false,
             ffmpeg_encoders: Vec::new(),
+            deno_version: None,
             install: InstallState::Idle,
             ffmpeg_install: InstallState::Idle,
             log: Vec::new(),
@@ -128,6 +131,8 @@ pub enum SetupEvent {
     /// A probe for ffmpeg alone, run at every launch and whenever the
     /// configured path changes.
     Ffmpeg(Option<String>, Vec<String>),
+    /// The managed deno's version, or None when there is no managed deno.
+    Deno(Option<String>),
 }
 
 /// State for the remux screen, which runs at most one ffmpeg job at a time.
@@ -971,6 +976,11 @@ impl SnagApp {
             let ytdlp = crate::installer::detect(&configured_ytdlp);
             let ffmpeg = crate::installer::detect_ffmpeg(&configured_ffmpeg);
             let _ = tx.send(SetupEvent::Detected { ytdlp, ffmpeg });
+            // Both detection paths answer the deno question, or a first run
+            // that skips setup would show the updates screen a stale None.
+            let deno = crate::installer::managed_deno()
+                .and_then(|p| crate::installer::deno_version(&p).ok());
+            let _ = tx.send(SetupEvent::Deno(deno));
             repaint();
         });
     }
@@ -989,6 +999,9 @@ impl SnagApp {
                 Vec::new()
             };
             let _ = tx.send(SetupEvent::Ffmpeg(found, encoders));
+            let deno = crate::installer::managed_deno()
+                .and_then(|p| crate::installer::deno_version(&p).ok());
+            let _ = tx.send(SetupEvent::Deno(deno));
             repaint();
         });
     }
@@ -1056,6 +1069,7 @@ impl SnagApp {
                         self.setup.ffmpeg_encoders = crate::installer::ffmpeg_hw_encoders(&bin);
                     }
                 }
+                SetupEvent::Deno(version) => self.setup.deno_version = version,
                 SetupEvent::Ffmpeg(found, encoders) => {
                     self.setup.found_ffmpeg = found;
                     self.setup.ffmpeg_encoders = encoders;
@@ -1081,6 +1095,8 @@ impl SnagApp {
                     }
                     if let InstallState::Done { version, .. } = &st {
                         self.toast(format!("installed yt-dlp {version}"), false);
+                        self.setup.deno_version = crate::installer::managed_deno()
+                            .and_then(|p| crate::installer::deno_version(&p).ok());
                         self.ytdlp_version = version.clone();
                     }
                     self.setup.install = st;

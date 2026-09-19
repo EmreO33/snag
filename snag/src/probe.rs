@@ -137,7 +137,8 @@ pub fn spawn(
         });
         repaint();
 
-        let mut args = vec![
+        let mut args = crate::ytdlp::js_runtime_args();
+        args.extend([
             "--dump-single-json".to_string(),
             // Without this a 200-item playlist would be resolved item by item,
             // which takes far too long for something that runs as you type.
@@ -148,7 +149,7 @@ pub fn spawn(
             "2".to_string(),
             "--socket-timeout".to_string(),
             "15".to_string(),
-        ];
+        ]);
         if !settings.network.proxy.trim().is_empty() {
             args.push("--proxy".to_string());
             args.push(settings.network.proxy.trim().to_string());

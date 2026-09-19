@@ -1,6 +1,6 @@
 [package]
 name = "snag"
-version = "1.3.5"
+version = "1.3.6"
 edition = "2021"
 description = "Snag - a fast, native video downloader built on yt-dlp"
 authors = ["Snag"]
@@ -19,6 +19,9 @@ directories = "5"
 arboard = "3"
 ureq = { version = "2", features = ["json", "tls"] }
 png = "0.17"
+# Deno arrives from its releases as a zip holding one binary. Deflate is the
+# only method those zips use.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Thumbnails come back as jpeg or webp. The crate is already in the tree via
 # eframe and arboard, so this only adds the two decoders.

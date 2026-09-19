@@ -90,9 +90,8 @@ pub enum InstallEvent {
     Log(String),
 }
 
-fn download_to(dest: &Path, tx: &Sender<InstallEvent>) -> Result<(), String> {
-    let url = download_url();
-    let resp = ureq::get(&url)
+fn download_to(url: &str, dest: &Path, tx: &Sender<InstallEvent>) -> Result<(), String> {
+    let resp = ureq::get(url)
         .set("User-Agent", "Snag")
         .timeout(std::time::Duration::from_secs(60))
         .call()
@@ -173,7 +172,7 @@ pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send
         }));
         repaint();
 
-        if let Err(e) = download_to(&dest, &tx) {
+        if let Err(e) = download_to(&download_url(), &dest, &tx) {
             let _ = tx.send(InstallEvent::State(InstallState::Failed(e)));
             repaint();
             return;
@@ -187,6 +186,24 @@ pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send
             Ok(version) => {
                 let version = version.trim().to_string();
                 let _ = tx.send(InstallEvent::Log(format!("verified:    yt-dlp {version}")));
+
+                // yt-dlp wants a javascript runtime for youtube and has
+                // deprecated working without one, so it comes along with
+                // yt-dlp rather than being a second thing to know about. Not
+                // having it is not yet fatal, so a failure here is logged
+                // and yt-dlp still counts as installed.
+                let _ = tx.send(InstallEvent::State(InstallState::Verifying));
+                match ensure_deno(&dir, &tx) {
+                    Ok(v) => {
+                        let _ = tx.send(InstallEvent::Log(format!("verified:    deno {v}")));
+                    }
+                    Err(e) => {
+                        let _ = tx.send(InstallEvent::Log(format!(
+                            "deno:        not installed ({e}). youtube still works today, but yt-dlp has deprecated running without it."
+                        )));
+                    }
+                }
+
                 let _ = tx.send(InstallEvent::State(InstallState::Done {
                     path: dest,
                     version,
@@ -234,6 +251,123 @@ pub fn detect(configured: &str) -> Option<(String, String)> {
         }
     }
     None
+}
+
+// --- deno -------------------------------------------------------------------
+//
+// yt-dlp solves youtube's player challenges in javascript and needs a runtime
+// to run it. Without one it falls back to a path it has already deprecated
+// and warns on every download. Deno is the runtime it enables by default, it
+// ships as a single static binary, and its releases are on github like
+// yt-dlp's, so it is fetched the same way and kept in the same folder.
+
+/// The deno release asset for this platform.
+pub fn deno_asset_name() -> &'static str {
+    if cfg!(windows) {
+        // Deno publishes no arm64 windows build; the x86_64 one runs there
+        // under emulation, which is slow but is what there is.
+        "deno-x86_64-pc-windows-msvc.zip"
+    } else if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") {
+            "deno-aarch64-apple-darwin.zip"
+        } else {
+            "deno-x86_64-apple-darwin.zip"
+        }
+    } else if cfg!(target_arch = "aarch64") {
+        "deno-aarch64-unknown-linux-gnu.zip"
+    } else {
+        "deno-x86_64-unknown-linux-gnu.zip"
+    }
+}
+
+pub fn deno_local_name() -> &'static str {
+    if cfg!(windows) {
+        "deno.exe"
+    } else {
+        "deno"
+    }
+}
+
+pub fn deno_download_url() -> String {
+    format!(
+        "https://github.com/denoland/deno/releases/latest/download/{}",
+        deno_asset_name()
+    )
+}
+
+/// Where a snag-installed deno lives, if it is there.
+///
+/// Only snag's own copy is reported: a deno on PATH is found by yt-dlp on
+/// its own and needs no pointing at.
+pub fn managed_deno() -> Option<PathBuf> {
+    let path = crate::bootstrap::managed_bin_dir().join(deno_local_name());
+    path.is_file().then_some(path)
+}
+
+/// The version of a deno binary, or why it could not be asked.
+pub fn deno_version(bin: &Path) -> Result<String, String> {
+    let out = util::run_capture(&bin.display().to_string(), &["--version"])?;
+    // "deno 2.9.7 (stable, release, x86_64-pc-windows-msvc)" on the first line.
+    out.lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+        .map(str::to_string)
+        .ok_or_else(|| "deno gave no version".to_string())
+}
+
+/// Put a deno into `dir` unless one is already there, and return its version.
+///
+/// Downloads the release zip, pulls the one binary out of it, and checks it
+/// runs. The zip is written beside the target so nothing half-extracted can be
+/// mistaken for a runtime.
+pub fn ensure_deno(dir: &Path, tx: &Sender<InstallEvent>) -> Result<String, String> {
+    let dest = dir.join(deno_local_name());
+    if dest.is_file() {
+        if let Ok(v) = deno_version(&dest) {
+            return Ok(v);
+        }
+        // Present but broken: fall through and replace it.
+    }
+
+    let _ = tx.send(InstallEvent::Log(format!(
+        "source:      {}",
+        deno_download_url()
+    )));
+    // Not "deno.zip.part": download_to makes its own temp name by swapping
+    // the extension for .part, and that name must not collide with this one.
+    let zip_path = dir.join("deno-download.zip");
+    download_to(&deno_download_url(), &zip_path, tx)?;
+
+    let extracted = (|| -> Result<(), String> {
+        let file = std::fs::File::open(&zip_path).map_err(|e| e.to_string())?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("bad zip: {e}"))?;
+        let wanted = deno_local_name();
+        let mut entry = archive
+            .by_name(wanted)
+            .map_err(|_| format!("{wanted} is not in the archive"))?;
+
+        let temp = dest.with_extension("part");
+        let mut out = std::fs::File::create(&temp).map_err(|e| e.to_string())?;
+        std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
+        drop(out);
+        let _ = std::fs::remove_file(&dest);
+        std::fs::rename(&temp, &dest).map_err(|e| e.to_string())?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755));
+        }
+        Ok(())
+    })();
+    let _ = std::fs::remove_file(&zip_path);
+    extracted?;
+
+    let _ = tx.send(InstallEvent::Log(format!(
+        "destination: {}",
+        dest.display()
+    )));
+    deno_version(&dest)
 }
 
 // --- ffmpeg -----------------------------------------------------------------
@@ -438,6 +572,54 @@ pub fn detect_ffmpeg(configured: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    /// The real installer against real github: yt-dlp and then deno into a
+    /// scratch folder, both verified by running them. Network, hence ignored.
+    #[test]
+    #[ignore = "downloads from github"]
+    fn installing_ytdlp_brings_deno_with_it() {
+        use super::*;
+        use std::sync::mpsc::channel;
+        let dir = std::env::temp_dir().join("snag-install-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let (tx, rx) = channel();
+        install(dir.clone(), tx, || {});
+        let mut done = None;
+        let mut log = Vec::new();
+        while let Ok(ev) = rx.recv_timeout(std::time::Duration::from_secs(300)) {
+            match ev {
+                InstallEvent::Log(l) => log.push(l),
+                InstallEvent::State(InstallState::Done { .. }) => {
+                    done = Some(true);
+                    break;
+                }
+                InstallEvent::State(InstallState::Failed(e)) => panic!("install failed: {e}"),
+                _ => {}
+            }
+        }
+        assert_eq!(done, Some(true), "no verdict");
+        for l in &log {
+            eprintln!("  {l}");
+        }
+
+        let deno = dir.join(deno_local_name());
+        assert!(deno.is_file(), "deno was not installed alongside");
+        let v = deno_version(&deno).unwrap();
+        assert!(v.starts_with(char::is_numeric), "odd version: {v}");
+        assert!(
+            log.iter().any(|l| l.contains("verified:    deno")),
+            "{log:?}"
+        );
+
+        // Nothing half-done left behind.
+        assert!(!dir.join("deno-download.zip").exists());
+        assert!(!dir.join("deno-download.part").exists());
+        assert!(!dir.join("deno.part").exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The bare `yt-dlp` asset is a Python zipapp. Downloading it onto a machine
     /// without Python produces a baffling ENOENT, so it must never be chosen.
     #[test]

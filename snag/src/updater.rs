@@ -139,6 +139,23 @@ fn install_blocking(bin: &str, tx: &Sender<UpdateEvent>) {
             }
 
             if out.status.success() {
+                // A yt-dlp that snag manages gets its javascript runtime kept
+                // alongside, so a copy installed before deno came with it
+                // picks one up here. A yt-dlp from elsewhere is left alone.
+                let managed = crate::bootstrap::managed_bin_dir();
+                if std::path::Path::new(bin).starts_with(&managed) {
+                    let (itx, irx) = std::sync::mpsc::channel();
+                    let result = crate::installer::ensure_deno(&managed, &itx);
+                    for ev in irx.try_iter() {
+                        if let crate::installer::InstallEvent::Log(l) = ev {
+                            let _ = tx.send(UpdateEvent::Log(l));
+                        }
+                    }
+                    let _ = tx.send(UpdateEvent::Log(match result {
+                        Ok(v) => format!("deno {v} is alongside yt-dlp"),
+                        Err(e) => format!("deno could not be installed: {e}"),
+                    }));
+                }
                 match current_version(bin) {
                     Ok(v) => {
                         let _ = tx.send(UpdateEvent::Current(v.clone()));

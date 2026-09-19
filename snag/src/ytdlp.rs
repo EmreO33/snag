@@ -204,10 +204,25 @@ fn format_sort(mode: Mode, overrides: JobOverrides, s: &Settings) -> Option<Stri
     }
 }
 
+/// The arguments that point yt-dlp at snag's own deno, when there is one.
+///
+/// Empty when there is not, which leaves yt-dlp to find a deno on PATH by
+/// itself or to fall back to running without one.
+pub fn js_runtime_args() -> Vec<String> {
+    match crate::installer::managed_deno() {
+        Some(path) => vec![
+            "--js-runtimes".to_string(),
+            format!("deno:{}", path.display()),
+        ],
+        None => Vec::new(),
+    }
+}
+
 /// Full argument vector for downloading `url` in `mode`.
 pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) -> Vec<String> {
     let mut a: Vec<String> = Vec::new();
     let push = |a: &mut Vec<String>, v: &str| a.push(v.to_string());
+    a.extend(js_runtime_args());
 
     // --- machine-readable output -------------------------------------------
     push(&mut a, "--newline");

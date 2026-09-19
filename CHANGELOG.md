@@ -8,6 +8,19 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.3.6
+
+- **Deno comes with yt-dlp.** yt-dlp now wants a JavaScript runtime to handle
+  YouTube's player, and has deprecated working without one: every YouTube
+  download has been printing a warning about it, and the fallback it uses
+  instead will be removed at some point. Rather than make that a second thing
+  to know about, Snag fetches Deno from its own GitHub releases whenever it
+  installs or updates yt-dlp, keeps it beside yt-dlp, and points yt-dlp at it.
+  Nothing to do, and the warning is gone.
+  - A yt-dlp you installed yourself is left alone. Give it a Deno on `PATH`
+    and yt-dlp finds it by itself.
+  - The updates screen says whether Deno is there.
+
 ## 1.3.5
 
 - **Hardware video encoding**, under settings > local processing. A clip cut

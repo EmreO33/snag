@@ -193,7 +193,8 @@ pub fn check(
         let _ = tx.send(SignInState::Checking);
         repaint();
 
-        let mut args = vec![
+        let mut args = crate::ytdlp::js_runtime_args();
+        args.extend([
             "--dump-single-json".to_string(),
             "--flat-playlist".to_string(),
             // One item is enough to prove the fetch worked, and pulling the
@@ -205,7 +206,7 @@ pub fn check(
             "--no-colors".to_string(),
             "--socket-timeout".to_string(),
             "20".to_string(),
-        ];
+        ]);
         // The probe URL is a YouTube one, so the scoping rule passes the
         // cookies through whatever the setting says.
         args.extend(cookie_args(&settings, SIGNED_IN_PROBE));

@@ -207,6 +207,21 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                 }
             });
 
+            // yt-dlp needs a javascript runtime for youtube. snag installs deno
+            // alongside yt-dlp, so this is status rather than a thing to do.
+            match &app.setup.deno_version {
+                Some(v) => theme::note_text(
+                    ui,
+                    &p,
+                    &format!("deno {v} is alongside, for youtube's player."),
+                ),
+                None => theme::note_text(
+                    ui,
+                    &p,
+                    "no deno alongside yt-dlp. youtube works without it today, but yt-dlp has deprecated running that way. snag adds it whenever it installs or updates yt-dlp.",
+                ),
+            }
+
             if app.settings.updater.last_check_unix > 0 {
                 let ago = crate::updater::now_unix()
                     .saturating_sub(app.settings.updater.last_check_unix);
