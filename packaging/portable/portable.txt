@@ -2,8 +2,16 @@ This file is what makes Snag portable.
 
 While it sits next to snag.exe, Snag keeps everything it owns in the "data"
 folder beside the executable: your settings, and any yt-dlp it installs for
-you. It writes nothing to AppData, the registry, or anywhere else on the
-machine, so you can carry this folder on a USB stick or delete it and be done.
+you. It writes nothing to AppData or anywhere else on the machine, so you can
+carry this folder on a USB stick or delete it and be done.
+
+The one exception is desktop notifications. Windows only shows notifications
+from apps it has been introduced to, and the introduction is a single key
+under your user's registry hive (HKCU\Software\Classes\AppUserModelId\EmreO33.Snag).
+Snag writes it while notifications are on, which they are by default, and
+removes it when you turn them off in settings > background. If a clean
+registry matters more to you than knowing when a download finished, turn
+them off.
 
 Delete this file and Snag reverts to the normal behaviour, storing settings in
 %APPDATA%\Snag\config instead.

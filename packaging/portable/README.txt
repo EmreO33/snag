@@ -4,8 +4,9 @@ Snag (portable)
 Run snag.exe. There is nothing to install.
 
 This is the portable build: everything Snag stores lives in the "data" folder
-next to the executable, and nothing is written anywhere else on the machine.
-See portable.txt for the details.
+next to the executable, and nothing else is written to the machine, apart from
+the one registry key Windows needs before it will show Snag's notifications.
+See portable.txt for the details, and for how to turn that off.
 
 First run asks you three things: where downloads go, and whether to fetch
 yt-dlp. Snag does not ship yt-dlp, so it offers to download the current release

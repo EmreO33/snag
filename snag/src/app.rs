@@ -235,6 +235,8 @@ pub struct SnagApp {
 
     /// Set while the window is hidden and Snag is only in the tray.
     pub hidden: bool,
+    /// Whether the window is the one in front, as of the last frame.
+    pub focused: bool,
     /// The last sane window size seen while visible. Hiding a viewport loses
     /// its geometry: it comes back a few pixels square unless the size is put
     /// back, and one command on the frame it reappears is not enough, so this
@@ -245,6 +247,7 @@ pub struct SnagApp {
     /// the window is minimised and the UI loop is asleep.
     clip_hidden: Arc<AtomicBool>,
     clip_restore: Arc<AtomicBool>,
+    clip_notify: Arc<AtomicBool>,
     clip_rx: Receiver<crate::clipboard::Found>,
     clip_tx: Sender<crate::clipboard::Found>,
     /// A link the user copied, waiting to be accepted or dismissed.
@@ -339,11 +342,13 @@ impl SnagApp {
             thumb_rx,
             history: History::load(),
             hidden: false,
+            focused: true,
 
             tray: None,
             clip_stop: None,
             clip_hidden: Arc::new(AtomicBool::new(false)),
             clip_restore: Arc::new(AtomicBool::new(false)),
+            clip_notify: Arc::new(AtomicBool::new(true)),
             clip_rx,
             clip_tx,
             offered_link: None,
@@ -667,11 +672,16 @@ impl SnagApp {
                 }
                 JobEvent::State(id, st) => {
                     let mut finished_ok = None;
+                    let mut failed = None;
                     if let Some(j) = self.jobs.iter_mut().find(|j| j.id == id) {
-                        if st == JobState::Done {
-                            j.downloaded = j.total.max(j.downloaded);
-                            j.speed = 0.0;
-                            finished_ok = Some(j.display_name());
+                        match &st {
+                            JobState::Done => {
+                                j.downloaded = j.total.max(j.downloaded);
+                                j.speed = 0.0;
+                                finished_ok = Some(j.display_name());
+                            }
+                            JobState::Failed(_) => failed = Some(j.display_name()),
+                            _ => {}
                         }
                         j.state = st;
                     }
@@ -679,6 +689,10 @@ impl SnagApp {
                         let short: String = name.chars().take(48).collect();
                         self.toast(format!("saved {short}"), false);
                         self.record_in_history(id);
+                        self.notify_away("Download finished", &name);
+                    }
+                    if let Some(name) = failed {
+                        self.notify_away("Download failed", &name);
                     }
                 }
                 JobEvent::Log(id, line) => {
@@ -696,6 +710,26 @@ impl SnagApp {
                 }
             }
         }
+    }
+
+    /// A desktop notification, sent only when Snag is not the thing being
+    /// looked at: hidden in the tray, minimised, or behind another window.
+    /// In front, the in-app toast has already said it.
+    fn notify_away(&self, title: &str, name: &str) {
+        if !self.settings.background.notifications || (!self.hidden && self.focused) {
+            return;
+        }
+        let short: String = if name.chars().count() > 90 {
+            format!("{}...", name.chars().take(87).collect::<String>())
+        } else {
+            name.to_string()
+        };
+        // Off the UI thread: on some desktops the call blocks until the
+        // notification daemon answers.
+        let title = title.to_string();
+        std::thread::spawn(move || {
+            crate::notify::send(&title, &short, true);
+        });
     }
 
     /// Remember a finished download so it can be found again later.
@@ -1261,6 +1295,21 @@ impl SnagApp {
     /// Start or stop the tray icon and the clipboard watcher to match settings.
     /// Called whenever those settings might have changed, and once at startup.
     fn sync_background_features(&mut self, ctx: &egui::Context) {
+        // Windows shows nothing for an app that has not introduced itself,
+        // and the introduction is repeated at each launch because it is
+        // cheap and because a cleaned registry should not mean silence.
+        // Turning the setting off takes it back out. Off the UI thread: the
+        // registry is quick but the icon file is a write.
+        let notifications = self.settings.background.notifications;
+        std::thread::spawn(move || {
+            if notifications {
+                crate::notify::register();
+            } else {
+                crate::notify::unregister();
+            }
+        });
+        self.clip_notify.store(notifications, Ordering::Relaxed);
+
         let want_tray = self.settings.background.run_in_background && crate::tray::supported();
         if want_tray && self.tray.is_none() {
             self.tray = crate::tray::create();
@@ -1288,6 +1337,7 @@ impl SnagApp {
                     stop.clone(),
                     self.clip_hidden.clone(),
                     self.clip_restore.clone(),
+                    self.clip_notify.clone(),
                     self.clip_tx.clone(),
                     Self::repainter(ctx),
                 );
@@ -1312,10 +1362,13 @@ impl SnagApp {
 
     /// Note the platform window once it exists, so it can be restored later
     /// from any thread.
-    fn track_window(&mut self) {
+    fn track_window(&mut self, ctx: &egui::Context) {
         if !self.hidden {
             crate::window::remember_main_window();
         }
+        // None means the platform did not say, which is taken as "in front"
+        // so nothing is notified twice for want of an answer.
+        self.focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
     }
 
     fn handle_tray(&mut self, ctx: &egui::Context) {
@@ -1451,7 +1504,7 @@ impl eframe::App for SnagApp {
         self.persist_queue();
         self.pump_probe(ctx);
         self.pump_filmstrip(ctx);
-        self.track_window();
+        self.track_window(ctx);
         self.handle_tray(ctx);
         self.drain_clipboard(ctx);
         self.handle_shortcuts(ctx);

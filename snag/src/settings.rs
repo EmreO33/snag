@@ -451,7 +451,7 @@ impl Default for NetworkSettings {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
 pub struct BackgroundSettings {
     /// Closing the window hides Snag to the tray instead of quitting it.
@@ -459,9 +459,24 @@ pub struct BackgroundSettings {
     /// Watch the clipboard and offer links as they are copied.
     pub watch_clipboard: bool,
     /// Bring the window back when a link is copied. Off by default: hiding
-    /// Snag is a request to be left alone. This exists because a desktop
-    /// notification is not dependable everywhere, and this is.
+    /// Snag is a request to be left alone.
     pub show_on_copied_link: bool,
+    /// Desktop notifications: a download finishing or failing while Snag is
+    /// not the window in front, and a copied link while it is hidden. On by
+    /// default, since a download is exactly the kind of thing you walk away
+    /// from.
+    pub notifications: bool,
+}
+
+impl Default for BackgroundSettings {
+    fn default() -> Self {
+        Self {
+            run_in_background: false,
+            watch_clipboard: false,
+            show_on_copied_link: false,
+            notifications: true,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

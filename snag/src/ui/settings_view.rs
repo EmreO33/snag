@@ -609,14 +609,28 @@ fn background(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
             ui,
             &p,
             "bring snag back when a link is copied",
-            "off by default, because hiding snag is a request to be left alone. worth turning on if notifications do not reach you.",
+            "off by default, because hiding snag is a request to be left alone. with this off, a copied link is a notification and a mark on the tray icon.",
             &mut app.settings.background.show_on_copied_link,
         );
+    }
 
+    theme::section_title(ui, &p, "notifications");
+    changed |= theme::toggle_row(
+        ui,
+        &p,
+        "desktop notifications",
+        "when a download finishes or fails while snag is hidden, minimised or behind another window. in front, the message in the corner is enough.",
+        &mut app.settings.background.notifications,
+    );
+    if cfg!(windows) {
         theme::note_text(
             ui,
             &p,
-            "while snag is hidden it also tries a desktop notification. that works on linux and macos, but windows silently drops notifications from apps that were not installed from the store, so do not rely on it there.",
+            if crate::bootstrap::is_portable() {
+                "windows shows notifications only from apps it has been introduced to, so with this on, snag writes one key for itself under your user's registry hive. that is the one thing a portable copy puts outside its own folder, and turning this off removes it."
+            } else {
+                "if nothing appears, check that snag is allowed under windows settings > notifications, and that focus assist is not holding everything back."
+            },
         );
     }
 

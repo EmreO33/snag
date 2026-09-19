@@ -8,6 +8,7 @@ mod history;
 mod icon;
 mod installer;
 mod jobs;
+mod notify;
 mod probe;
 mod remux;
 mod selfupdate;
@@ -98,13 +99,18 @@ fn notify_test_and_exit() -> bool {
     if !std::env::args().any(|a| a == "--notify-test") {
         return false;
     }
-    let ok = clipboard::notify_found("https://example.com/a-video");
+    notify::register();
+    let ok = notify::send(
+        "Download finished",
+        "This is what a finished download looks like.",
+        true,
+    );
     println!(
         "notification accepted by the desktop: {ok}{}",
         if ok {
-            ""
+            ". if nothing appeared, check focus assist and the app's entry under system > notifications."
         } else {
-            " (nothing was shown; on windows an unpackaged app needs a registered app id)"
+            " (the desktop refused it)"
         }
     );
     true

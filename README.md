@@ -103,8 +103,9 @@ Portable is a behaviour, not a separate build: any copy of Snag turns portable
 when a file named `portable.txt` sits next to the executable (the portable zip
 ships one), or when it is started with `--portable`. In that mode the settings
 file and any Snag-installed yt-dlp live in `<folder>/data` instead of
-`%APPDATA%\Snag\config`, and nothing outside the folder is touched. Delete the
-marker file and it reverts to the normal behaviour.
+`%APPDATA%\Snag\config`, and nothing outside the folder is touched, except the
+registry key above when notifications are on. Delete the marker file and it
+reverts to the normal behaviour.
 
 ## First run
 
@@ -151,6 +152,16 @@ Snag in the system tray instead of quitting it, and it can watch the clipboard:
 copy a link anywhere and Snag offers it, rather than downloading it behind your
 back. Nothing but the clipboard's text is read, none of it is stored, and none
 of it leaves the machine.
+
+**notifications** &mdash; a download that finishes or fails while Snag is
+hidden, minimised or behind another window says so with a desktop
+notification. In front, the message in the corner is enough. Off in
+**settings &rarr; background** if you would rather not.
+
+On Windows, a notification is only shown for an app Windows has been
+introduced to, so Snag writes one key for itself under `HKCU\Software\Classes\AppUserModelId`
+at startup, the same thing Spotify and the rest do. Turning notifications off
+removes it, and so does the uninstaller.
 
 **youtube sign-in** &mdash; for age restricted, private and members-only videos.
 

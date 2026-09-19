@@ -8,6 +8,25 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.3.7
+
+- **Notifications on Windows work now.** They never did: Windows only shows a
+  notification from an app it has been introduced to, and Snag never
+  introduced itself, so every one it sent was accepted and quietly filed
+  away. It now registers its app id at startup the way other unpackaged apps
+  do (one key under `HKCU\Software\Classes\AppUserModelId`), the installer
+  stamps the same id on its shortcuts, and uninstalling or turning
+  notifications off removes the key.
+- **A download that finishes while you are elsewhere tells you.** Done or
+  failed, if Snag is hidden, minimised or behind another window, a desktop
+  notification says which one and what it was. In front, the message in the
+  corner was already enough, so nothing is said twice. On by default and off
+  in settings > background.
+- The copied-link notification now respects the same switch, and stays
+  silent; a finished download plays the desktop's default sound.
+- `snag --notify-test` registers first and sends the finished-download
+  notification, so it is a real test of what a user would see.
+
 ## 1.3.6
 
 - **Deno comes with yt-dlp.** yt-dlp now wants a JavaScript runtime to handle

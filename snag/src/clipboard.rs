@@ -30,6 +30,7 @@ pub fn watch(
     stop: Arc<AtomicBool>,
     hidden: Arc<AtomicBool>,
     restore_on_link: Arc<AtomicBool>,
+    notify: Arc<AtomicBool>,
     tx: Sender<Found>,
     repaint: impl Fn() + Send + 'static,
 ) {
@@ -66,9 +67,9 @@ pub fn watch(
                 }
 
                 if hidden.load(Ordering::Relaxed) {
-                    // Best effort: works on linux and macos, and is silently
-                    // dropped by windows for an app it did not install.
-                    notify_found(trimmed);
+                    if notify.load(Ordering::Relaxed) {
+                        notify_found(trimmed);
+                    }
                     if restore_on_link.load(Ordering::Relaxed) {
                         crate::window::restore();
                     }
@@ -87,19 +88,9 @@ pub fn notify_found(url: &str) -> bool {
     } else {
         url.to_string()
     };
-
-    let mut notification = notify_rust::Notification::new();
-    notification
-        .summary("Snag")
-        .body(&format!(
-            "Copied a link. Open Snag to download it.\n{short}"
-        ))
-        .appname("Snag");
-
-    // Windows attributes toasts to a registered app id; ours is the Start Menu
-    // shortcut the installer creates.
-    #[cfg(windows)]
-    notification.app_id("EmreO33.Snag");
-
-    notification.show().is_ok()
+    crate::notify::send(
+        "Snag",
+        &format!("Copied a link. Open Snag to download it.\n{short}"),
+        false,
+    )
 }
