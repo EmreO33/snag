@@ -144,6 +144,14 @@ Paste several links at once (one per line) and they all queue up. Paste a
 one you linked, all of them, or a pick: tick the items you want and each one
 queues as its own download.
 
+**presets** &mdash; a name for the mode, quality and extras you use often.
+Set a download up the way you like it, save it as a preset, and it is one
+click under the mode buttons from then on. A preset sets the real settings
+rather than hiding an override somewhere, and a download keeps the preset it
+was queued with, so changing your mind never reaches back into the queue.
+Manage them in **settings &rarr; presets**, or use one from a script with
+`snag --preset="music" <link> --download`.
+
 **queue** &mdash; live progress, speed, ETA and size per job, with cancel, retry,
 open, show-in-folder, copy-link and a per-job log. Runs several downloads at
 once, up to the limit you set.
@@ -153,6 +161,14 @@ Snag in the system tray instead of quitting it, and it can watch the clipboard:
 copy a link anywhere and Snag offers it, rather than downloading it behind your
 back. Nothing but the clipboard's text is read, none of it is stored, and none
 of it leaves the machine.
+
+**living in the tray** &mdash; optional, and off by default. Snag can start
+with Windows straight into the tray, so it is there before you need it. The
+tray menu has **download what I copied**, which takes the link on your
+clipboard and downloads it without a window opening at all, and there is a
+setting to skip even that: **just download what i copy** queues every link
+the moment you copy it, with the mode and quality currently set. Everything
+about it is in **settings &rarr; background**.
 
 **notifications** &mdash; a download that finishes or fails while Snag is
 hidden, minimised or behind another window says so with a desktop

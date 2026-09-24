@@ -36,6 +36,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             let mut changed = false;
             match app.settings_tab {
                 SettingsTab::Appearance => changed |= appearance(app, ui),
+                SettingsTab::Presets => changed |= presets(app, ui),
                 SettingsTab::Video => changed |= video(app, ui),
                 SettingsTab::Audio => changed |= audio(app, ui),
                 SettingsTab::Metadata => changed |= metadata(app, ui),
@@ -116,6 +117,128 @@ fn appearance(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         "animations",
         "hovers that fade, a marker that slides between screens, progress that catches up smoothly. turning this off makes every change instant.",
         &mut app.settings.appearance.animations,
+    );
+
+    changed
+}
+
+fn presets(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
+    let p = app.palette;
+    let mut changed = false;
+
+    theme::section_title(ui, &p, "presets");
+    theme::note_text(
+        ui,
+        &p,
+        "a preset is a name for the mode, quality and extras you use often. picking one on the save screen sets them, so what is on these settings screens is always what the next download will be.",
+    );
+
+    if app.settings.presets.is_empty() {
+        theme::card(ui, &p, |ui| {
+            ui.label(
+                egui::RichText::new("no presets yet")
+                    .size(13.0)
+                    .color(p.dim),
+            );
+        });
+        theme::note_text(
+            ui,
+            &p,
+            "set up a download the way you like it, then use \"save these settings\" under the mode buttons on the save screen.",
+        );
+        return changed;
+    }
+
+    // Collected while the rows are drawn, acted on after, so the list is not
+    // being changed while it is being walked.
+    let mut apply = None;
+    let mut update = None;
+    let mut remove = None;
+    let mut move_up = None;
+    let count = app.settings.presets.len();
+
+    for i in 0..count {
+        let active = app
+            .settings
+            .presets
+            .get(i)
+            .is_some_and(|preset| preset.matches(app.mode, &app.settings));
+        ui.push_id(i, |ui| {
+            theme::card(ui, &p, |ui| {
+                ui.horizontal(|ui| {
+                    let name = &mut app.settings.presets[i].name;
+                    let edit = egui::TextEdit::singleline(name)
+                        .desired_width(160.0)
+                        .font(egui::FontId::new(14.0, egui::FontFamily::Monospace))
+                        .text_color(p.text)
+                        .frame(false);
+                    let response = ui.add(edit);
+                    // A hand painted field with no label of its own says
+                    // nothing to a screen reader without this.
+                    let spoken = format!("preset name, {}", app.settings.presets[i].name);
+                    response.widget_info(|| {
+                        egui::WidgetInfo::text_edit(true, spoken.clone(), spoken.clone())
+                    });
+                    if response.changed() {
+                        changed = true;
+                    }
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if theme::pill(ui, &p, "delete", false, true).clicked() {
+                            remove = Some(i);
+                        }
+                        if theme::pill(ui, &p, "update", false, true)
+                            .on_hover_text("replace this preset with the settings as they are now")
+                            .clicked()
+                        {
+                            update = Some(i);
+                        }
+                        if theme::pill(ui, &p, "move up", false, i > 0).clicked() {
+                            move_up = Some(i);
+                        }
+                        // The one already in force says so rather than
+                        // offering to be switched to again.
+                        let label = if active { "in use" } else { "use" };
+                        if theme::pill(ui, &p, label, active, !active).clicked() {
+                            apply = Some(i);
+                        }
+                    });
+                });
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(super::home::preset_summary(&app.settings.presets[i]))
+                        .size(12.0)
+                        .color(p.dim),
+                );
+            });
+        });
+        ui.add_space(6.0);
+    }
+
+    if let Some(i) = apply {
+        app.apply_preset(i);
+        changed = true;
+    }
+    if let Some(i) = update {
+        let name = app.settings.presets[i].name.clone();
+        app.settings.presets[i] = crate::settings::Preset::capture(name, app.mode, &app.settings);
+        app.toast("preset updated", false);
+        changed = true;
+    }
+    if let Some(i) = remove {
+        let gone = app.settings.presets.remove(i);
+        app.toast(format!("deleted {}", gone.tidy_name()), false);
+        changed = true;
+    }
+    if let Some(i) = move_up {
+        app.settings.presets.swap(i - 1, i);
+        changed = true;
+    }
+
+    theme::note_text(
+        ui,
+        &p,
+        "a download keeps the preset it was queued with, so changing one of these, or picking another preset, never reaches back into the queue.",
     );
 
     changed

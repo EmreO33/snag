@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
-use crate::settings::{Mode, Settings};
+use crate::settings::{Mode, Preset, Settings};
 use crate::util;
 use crate::ytdlp;
 
@@ -90,6 +90,10 @@ pub struct Job {
     pub mode: Mode,
     /// Overrides for this download only, leaving the global settings alone.
     pub overrides: JobOverrides,
+    /// What this download is meant to be, taken when it was queued. Without
+    /// it, changing a setting or picking another preset would quietly change
+    /// every job still waiting its turn.
+    pub shape: Preset,
     pub title: String,
     pub state: JobState,
     pub downloaded: f64,
@@ -140,12 +144,13 @@ pub fn playlist_items_spec(sorted: &[usize]) -> String {
 }
 
 impl Job {
-    pub fn new(url: String, mode: Mode, overrides: JobOverrides) -> Self {
+    pub fn new(url: String, mode: Mode, overrides: JobOverrides, shape: Preset) -> Self {
         Self {
             id: next_id(),
             url,
             mode,
             overrides,
+            shape,
             title: String::new(),
             state: JobState::Queued,
             downloaded: 0.0,
@@ -370,6 +375,10 @@ pub struct Saved {
     pub overrides: JobOverrides,
     #[serde(default)]
     pub title: String,
+    /// Missing in queues written before presets existed, in which case the
+    /// settings as they are now are used, which is what used to happen.
+    #[serde(default)]
+    pub shape: Option<Preset>,
 }
 
 fn queue_path() -> PathBuf {
@@ -388,6 +397,7 @@ pub fn to_save(jobs: &[Job]) -> Vec<Saved> {
             mode: j.mode,
             overrides: j.overrides.clone(),
             title: j.title.clone(),
+            shape: Some(j.shape.clone()),
         })
         .collect()
 }
@@ -417,8 +427,11 @@ pub fn save_queue(saved: &[Saved]) -> Result<(), String> {
 
 impl Job {
     /// Rebuild a job that outlived the run that made it.
-    pub fn restored(saved: Saved) -> Self {
-        let mut job = Job::new(saved.url, saved.mode, saved.overrides);
+    pub fn restored(saved: Saved, settings: &Settings) -> Self {
+        let shape = saved
+            .shape
+            .unwrap_or_else(|| Preset::capture("", saved.mode, settings));
+        let mut job = Job::new(saved.url, saved.mode, saved.overrides, shape);
         job.title = saved.title;
         job.state = JobState::Interrupted;
         job
@@ -440,11 +453,32 @@ mod tests {
 
     #[test]
     fn only_unfinished_work_is_written_down() {
+        let shape = |mode| Preset::capture("", mode, &Settings::default());
         let mut jobs = vec![
-            Job::new("a".into(), Mode::Auto, JobOverrides::default()),
-            Job::new("b".into(), Mode::Audio, JobOverrides::default()),
-            Job::new("c".into(), Mode::Auto, JobOverrides::default()),
-            Job::new("d".into(), Mode::Auto, JobOverrides::default()),
+            Job::new(
+                "a".into(),
+                Mode::Auto,
+                JobOverrides::default(),
+                shape(Mode::Auto),
+            ),
+            Job::new(
+                "b".into(),
+                Mode::Audio,
+                JobOverrides::default(),
+                shape(Mode::Audio),
+            ),
+            Job::new(
+                "c".into(),
+                Mode::Auto,
+                JobOverrides::default(),
+                shape(Mode::Auto),
+            ),
+            Job::new(
+                "d".into(),
+                Mode::Auto,
+                JobOverrides::default(),
+                shape(Mode::Auto),
+            ),
         ];
         jobs[0].state = JobState::Downloading;
         jobs[1].state = JobState::Done;
@@ -459,16 +493,21 @@ mod tests {
 
     #[test]
     fn a_restored_job_waits_to_be_asked() {
-        let job = Job::restored(Saved {
-            url: "https://example.com/v".into(),
-            mode: Mode::Audio,
-            overrides: JobOverrides {
-                whole_playlist: true,
-                height: Some(720),
-                ..Default::default()
+        let job = Job::restored(
+            Saved {
+                url: "https://example.com/v".into(),
+                mode: Mode::Audio,
+                overrides: JobOverrides {
+                    whole_playlist: true,
+                    height: Some(720),
+                    ..Default::default()
+                },
+                title: "something".into(),
+                // A queue written before presets existed.
+                shape: None,
             },
-            title: "something".into(),
-        });
+            &Settings::default(),
+        );
         assert_eq!(job.state, JobState::Interrupted);
         assert!(job.state.is_resumable());
         // Terminal keeps it out of the running count and gives it a resume

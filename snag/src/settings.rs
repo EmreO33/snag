@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Declares a small closed-set enum with display labels and an ordered list,
 /// which is what every pill row and dropdown in the settings UI is built from.
@@ -538,6 +538,59 @@ impl Default for AdvancedSettings {
     }
 }
 
+/// A named set of the choices that decide what a download *is*: which
+/// format, at what quality, with which extras, and where it lands. Not the
+/// machinery around it, so a preset never carries your proxy or the path to
+/// yt-dlp: those are the same whatever you are downloading, and a queued job
+/// picking up a stale copy of them would be a bug rather than a feature.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+#[serde(default)]
+pub struct Preset {
+    pub name: String,
+    pub mode: Mode,
+    pub video: VideoSettings,
+    pub audio: AudioSettings,
+    pub metadata: MetadataSettings,
+    /// Where these downloads go. Empty means wherever the main setting says,
+    /// which is what most presets want.
+    pub download_dir: String,
+}
+
+impl Preset {
+    /// Take the shape of what is set right now.
+    pub fn capture(name: impl Into<String>, mode: Mode, s: &Settings) -> Self {
+        Self {
+            name: name.into(),
+            mode,
+            video: s.video.clone(),
+            audio: s.audio.clone(),
+            metadata: s.metadata.clone(),
+            download_dir: String::new(),
+        }
+    }
+
+    /// Whether this is the shape currently set, which is what makes one of
+    /// the preset buttons light up rather than none of them.
+    pub fn matches(&self, mode: Mode, s: &Settings) -> bool {
+        self.mode == mode
+            && self.video == s.video
+            && self.audio == s.audio
+            && self.metadata == s.metadata
+            && (self.download_dir.is_empty()
+                || Path::new(&self.download_dir) == s.processing.download_dir)
+    }
+
+    /// A name that can be told apart from the others, and from nothing.
+    pub fn tidy_name(&self) -> String {
+        let name = self.name.trim();
+        if name.is_empty() {
+            "unnamed".to_string()
+        } else {
+            name.chars().take(24).collect()
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
 #[serde(default)]
 pub struct Settings {
@@ -552,9 +605,23 @@ pub struct Settings {
     pub network: NetworkSettings,
     pub updater: UpdaterSettings,
     pub advanced: AdvancedSettings,
+    /// Saved shapes, in the order they are shown.
+    pub presets: Vec<Preset>,
 }
 
 impl Settings {
+    /// Set everything a preset covers, leaving everything else alone.
+    /// Returns the mode it asks for, which lives outside the settings.
+    pub fn apply_preset(&mut self, preset: &Preset) -> Mode {
+        self.video = preset.video.clone();
+        self.audio = preset.audio.clone();
+        self.metadata = preset.metadata.clone();
+        if !preset.download_dir.trim().is_empty() {
+            self.processing.download_dir = PathBuf::from(preset.download_dir.trim());
+        }
+        preset.mode
+    }
+
     pub fn config_dir() -> PathBuf {
         crate::bootstrap::config_dir()
     }
@@ -615,5 +682,80 @@ impl Settings {
         } else {
             p.to_string()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn audio_preset() -> Preset {
+        let mut s = Settings::default();
+        s.audio.format = AudioFormat::Mp3;
+        s.audio.bitrate = AudioBitrate::K320;
+        Preset::capture("music", Mode::Audio, &s)
+    }
+
+    #[test]
+    fn a_preset_is_what_was_set_when_it_was_saved() {
+        let mut now = Settings::default();
+        now.video.quality = VideoQuality::Q360;
+        let preset = Preset::capture("small", Mode::Auto, &now);
+
+        // Moving on does not change what the preset holds...
+        now.video.quality = VideoQuality::Q1080;
+        assert_eq!(preset.video.quality, VideoQuality::Q360);
+        assert!(!preset.matches(Mode::Auto, &now));
+
+        // ...and going back to it puts everything where it was.
+        let mode = now.apply_preset(&preset);
+        assert_eq!(mode, Mode::Auto);
+        assert_eq!(now.video.quality, VideoQuality::Q360);
+        assert!(preset.matches(mode, &now));
+    }
+
+    #[test]
+    fn a_preset_leaves_the_machinery_alone() {
+        let mut now = Settings::default();
+        now.advanced.ytdlp_path = "C:/tools/yt-dlp.exe".into();
+        now.network.proxy = "http://127.0.0.1:8080".into();
+        now.processing.max_concurrent_jobs = 5;
+
+        now.apply_preset(&audio_preset());
+
+        // Where yt-dlp is and how to reach the network are facts about this
+        // machine, not about what you are downloading.
+        assert_eq!(now.advanced.ytdlp_path, "C:/tools/yt-dlp.exe");
+        assert_eq!(now.network.proxy, "http://127.0.0.1:8080");
+        assert_eq!(now.processing.max_concurrent_jobs, 5);
+        assert_eq!(now.audio.format, AudioFormat::Mp3);
+    }
+
+    /// The reason a job carries its own shape: queue something as audio,
+    /// switch to video, and the job that has not started yet is still audio.
+    #[test]
+    fn a_queued_shape_survives_the_settings_changing_under_it() {
+        let shape = audio_preset();
+
+        let mut later = Settings::default();
+        later.video.quality = VideoQuality::Q1080;
+        later.audio.format = AudioFormat::Opus;
+
+        let mut for_this_job = later.clone();
+        let mode = for_this_job.apply_preset(&shape);
+
+        let args = crate::ytdlp::build_args(
+            "https://example.test/v",
+            mode,
+            crate::jobs::JobOverrides::default(),
+            &for_this_job,
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--audio-format" && w[1] == "mp3"),
+            "the job kept the format it was queued with: {args:?}"
+        );
+        // And the settings themselves were not dragged back in time.
+        assert_eq!(later.audio.format, AudioFormat::Opus);
     }
 }

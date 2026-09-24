@@ -47,6 +47,7 @@ pub enum View {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SettingsTab {
     Appearance,
+    Presets,
     Video,
     Audio,
     Metadata,
@@ -60,6 +61,7 @@ pub enum SettingsTab {
 impl SettingsTab {
     pub const ALL: &'static [SettingsTab] = &[
         SettingsTab::Appearance,
+        SettingsTab::Presets,
         SettingsTab::Video,
         SettingsTab::Audio,
         SettingsTab::Metadata,
@@ -72,6 +74,7 @@ impl SettingsTab {
     pub fn label(&self) -> &'static str {
         match self {
             SettingsTab::Appearance => "appearance",
+            SettingsTab::Presets => "presets",
             SettingsTab::Video => "video",
             SettingsTab::Audio => "audio",
             SettingsTab::Metadata => "metadata",
@@ -338,7 +341,11 @@ impl SnagApp {
         // than running. Snag does not start work you have not asked for, and
         // reopening it is not the same as asking.
         let saved_queue = crate::jobs::load_queue();
-        let restored: Vec<Job> = saved_queue.iter().cloned().map(Job::restored).collect();
+        let restored: Vec<Job> = saved_queue
+            .iter()
+            .cloned()
+            .map(|saved| Job::restored(saved, &settings))
+            .collect();
 
         let logo = crate::icon::mark_image().map(|image| {
             cc.egui_ctx
@@ -639,7 +646,8 @@ impl SnagApp {
                                 height: self.height_override,
                                 ..Default::default()
                             };
-                            let mut job = Job::new(link.clone(), self.mode, overrides);
+                            let mut job =
+                                Job::new(link.clone(), self.mode, overrides, self.shape());
                             // The listing already knows the title; no sense
                             // showing a bare link until yt-dlp repeats it.
                             job.title = entry.title.clone();
@@ -655,7 +663,8 @@ impl SnagApp {
                         height: self.height_override,
                         ..Default::default()
                     };
-                    self.jobs.push(Job::new(url, self.mode, overrides));
+                    self.jobs
+                        .push(Job::new(url, self.mode, overrides, self.shape()));
                     queued += 1;
                 }
                 continue;
@@ -665,7 +674,8 @@ impl SnagApp {
                 playlist_items: None,
                 height: self.height_override,
             };
-            self.jobs.push(Job::new(url, self.mode, overrides));
+            self.jobs
+                .push(Job::new(url, self.mode, overrides, self.shape()));
             queued += 1;
         }
 
@@ -716,12 +726,18 @@ impl SnagApp {
             if job.state == JobState::Queued {
                 job.state = JobState::Starting;
                 running += 1;
+                // The machinery (paths, proxy, how many at once) is read
+                // live, so fixing one of those helps a job that has not
+                // started. What the download is meant to be comes from the
+                // job, taken when it was queued.
+                let mut settings = self.settings.clone();
+                job.mode = settings.apply_preset(&job.shape);
                 crate::jobs::spawn(
                     job.id,
                     job.url.clone(),
                     job.mode,
                     job.overrides.clone(),
-                    self.settings.clone(),
+                    settings,
                     job.child.clone(),
                     job.cancel_flag.clone(),
                     self.job_tx.clone(),
@@ -1602,6 +1618,86 @@ impl SnagApp {
         }
     }
 
+    /// What a download queued right now would be: the current mode and the
+    /// settings that shape the file, frozen so that later changes cannot
+    /// reach back into a job that is still waiting.
+    pub fn shape(&self) -> crate::settings::Preset {
+        crate::settings::Preset::capture(
+            self.active_preset_name().unwrap_or_default(),
+            self.mode,
+            &self.settings,
+        )
+    }
+
+    /// The name of the preset the current settings match, if any.
+    pub fn active_preset_name(&self) -> Option<String> {
+        self.settings
+            .presets
+            .iter()
+            .find(|p| p.matches(self.mode, &self.settings))
+            .map(|p| p.tidy_name())
+    }
+
+    /// Switch to the preset with this name, ignoring case and surrounding
+    /// space. False when there is no such preset.
+    pub fn apply_preset_named(&mut self, name: &str) -> bool {
+        let wanted = name.trim();
+        let found = self
+            .settings
+            .presets
+            .iter()
+            .position(|p| p.name.trim().eq_ignore_ascii_case(wanted));
+        match found {
+            Some(i) => {
+                self.apply_preset(i);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Switch to a saved preset: everything it covers is set, everything
+    /// else is left alone.
+    pub fn apply_preset(&mut self, index: usize) {
+        let Some(preset) = self.settings.presets.get(index).cloned() else {
+            return;
+        };
+        self.mode = self.settings.apply_preset(&preset);
+        self.toast(format!("using {}", preset.tidy_name()), false);
+    }
+
+    /// Save what is set right now as a new preset.
+    pub fn save_preset(&mut self) {
+        // Named after nothing in particular, because only the person doing
+        // it knows what it is for. The name is editable where they land.
+        let mut name = match self.mode {
+            Mode::Audio => "audio".to_string(),
+            Mode::Mute => "muted".to_string(),
+            Mode::Auto => self
+                .settings
+                .video
+                .quality
+                .height()
+                .map(|h| format!("{h}p"))
+                .unwrap_or_else(|| "video".to_string()),
+        };
+        let taken = |n: &str, s: &crate::settings::Settings| {
+            s.presets.iter().any(|p| p.name.eq_ignore_ascii_case(n))
+        };
+        if taken(&name, &self.settings) {
+            for n in 2..99 {
+                let candidate = format!("{name} {n}");
+                if !taken(&candidate, &self.settings) {
+                    name = candidate;
+                    break;
+                }
+            }
+        }
+        let preset = crate::settings::Preset::capture(name, self.mode, &self.settings);
+        self.settings.presets.push(preset);
+        self.toast("saved these settings as a preset", false);
+    }
+
     /// Queue one link with the current mode, as the tray and the clipboard
     /// watcher do when nobody is looking at the window. False when it was
     /// already in the queue.
@@ -1613,7 +1709,8 @@ impl SnagApp {
             height: self.height_override,
             ..Default::default()
         };
-        self.jobs.push(Job::new(url, self.mode, overrides));
+        self.jobs
+            .push(Job::new(url, self.mode, overrides, self.shape()));
         let short = if self.mode == Mode::Audio {
             "queued the copied link as audio"
         } else {

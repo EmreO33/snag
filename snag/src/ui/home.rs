@@ -155,6 +155,9 @@ fn page(app: &mut SnagApp, ui: &mut egui::Ui) {
                         .color(p.faint),
                 );
 
+                // --- presets ----------------------------------------------
+                presets(app, ui, &p);
+
                 // --- what the link turned out to be ------------------------
                 preview(app, ui, &p);
 
@@ -427,6 +430,73 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
             });
         }
     });
+}
+
+/// The saved shapes, and the button that saves another one.
+///
+/// A preset is not a per-download override: picking one sets the settings it
+/// covers, so what you see on the settings screen is always what the next
+/// download will be. That is the whole trick to it being understandable.
+fn presets(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
+    let presets = app.settings.presets.clone();
+    let active = app.active_preset_name();
+
+    ui.add_space(8.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        ui.label(egui::RichText::new("preset").size(12.0).color(p.dim));
+
+        let mut apply = None;
+        for (i, preset) in presets.iter().enumerate() {
+            let name = preset.tidy_name();
+            let selected = active.as_deref() == Some(name.as_str());
+            if theme::pill(ui, p, &name, selected, true)
+                .on_hover_text(preset_summary(preset))
+                .clicked()
+            {
+                apply = Some(i);
+            }
+        }
+        if let Some(i) = apply {
+            app.apply_preset(i);
+            app.mark_dirty();
+        }
+
+        // Saving is only offered when there is something new to save.
+        if active.is_none()
+            && theme::pill(ui, p, "+ save these settings", false, true)
+                .on_hover_text("keep the current mode, quality and extras under a name")
+                .clicked()
+        {
+            app.save_preset();
+            app.mark_dirty();
+        }
+    });
+}
+
+/// What a preset would do, in one line, for the tooltip.
+pub fn preset_summary(preset: &crate::settings::Preset) -> String {
+    let mut parts = vec![preset.mode.label().to_string()];
+    match preset.mode {
+        crate::settings::Mode::Audio => {
+            parts.push(preset.audio.format.label().to_string());
+            parts.push(preset.audio.bitrate.label().to_string());
+        }
+        _ => {
+            parts.push(preset.video.quality.label().to_string());
+            parts.push(preset.video.codec.label().to_string());
+        }
+    }
+    if preset.metadata.write_subtitle_files {
+        parts.push("subtitles".to_string());
+    }
+    if preset.metadata.split_chapters {
+        parts.push("split by chapter".to_string());
+    }
+    if !preset.download_dir.trim().is_empty() {
+        parts.push(preset.download_dir.trim().to_string());
+    }
+    parts.join(", ")
 }
 
 /// The playlist's items with a box each, for taking some and not others.

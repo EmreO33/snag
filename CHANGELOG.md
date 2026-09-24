@@ -8,6 +8,30 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.0
+
+- **Presets.** A name for the mode, quality and extras you use often:
+  "music", "phone", "archive". They sit under the mode buttons on the save
+  screen, one click sets them, and settings > presets is where you rename,
+  reorder, update and delete them. Picking one sets the actual settings, so
+  what the settings screens say is always what the next download will be.
+  - A download keeps the preset it was queued with. Queue five things as
+    music, switch to archive, and the ones still waiting are still music.
+    That also fixes a quieter old bug: changing any setting used to reach
+    back into jobs that had not started yet.
+  - `snag --preset="music" <link> --download` for a shortcut or a script.
+- **Snag can live in the tray.** It can start with Windows and go straight
+  there, the tray menu has "download what I copied" for when you do not want
+  a window at all, and an opt-in mode downloads every link you copy the
+  moment you copy it. All of it off by default, under settings > background.
+- **The interface moves.** Hovers fade, buttons sink when pressed, the mark
+  in the nav rail slides to the screen you picked, screens arrive instead of
+  appearing, the progress bar catches up smoothly instead of jumping, and
+  messages slide in. Nothing takes longer than a fifth of a second. Off in
+  settings > appearance, where off means instant.
+- Fixed: the animations setting, and anything else under appearance, was
+  only applied when it changed rather than at launch.
+
 ## 1.4.1
 
 - The ffmpeg card on the updates screen says "ffmpeg 9.0.1" rather than

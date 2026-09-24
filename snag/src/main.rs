@@ -137,6 +137,13 @@ fn startup_should_download() -> bool {
     std::env::args().any(|a| a == "--download")
 }
 
+/// `snag --preset=<name>` starts with that saved preset in force, so a
+/// shortcut or a script can ask for "the music one" without knowing what
+/// settings that means today.
+fn startup_preset() -> Option<String> {
+    std::env::args().find_map(|a| a.strip_prefix("--preset=").map(str::to_string))
+}
+
 /// `snag --tray` goes straight to the tray without showing a window, which
 /// is what the autostart shortcut passes. Ignored when there is no tray to
 /// go to, since that would leave no way to get the window back.
@@ -186,6 +193,12 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(move |cc| {
             let mut app = app::SnagApp::new(cc);
+            // Before the link is queued, so the download is shaped by it.
+            if let Some(name) = startup_preset() {
+                if !app.apply_preset_named(&name) {
+                    app.toast(format!("no preset called {name}"), true);
+                }
+            }
             if let Some(url) = startup_url() {
                 app.url_input = url;
                 if startup_should_download() {
