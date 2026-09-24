@@ -22,6 +22,22 @@ pub fn restore() {
     imp::restore();
 }
 
+/// Minimise the window, and report whether it really is minimised now.
+///
+/// Both halves matter at startup: for the first frame or two there is no
+/// window yet, and for a few frames after that winit shows the window again
+/// as it finishes setting it up, so one request is not enough and the caller
+/// has to keep asking until this says yes.
+pub fn minimise() -> bool {
+    #[cfg(windows)]
+    {
+        imp::remember();
+        imp::minimise()
+    }
+    #[cfg(not(windows))]
+    false
+}
+
 #[cfg(windows)]
 mod imp {
     use std::sync::atomic::{AtomicIsize, Ordering};
@@ -30,6 +46,7 @@ mod imp {
     static MAIN_WINDOW: AtomicIsize = AtomicIsize::new(0);
 
     const SW_RESTORE: i32 = 9;
+    const SW_MINIMIZE: i32 = 6;
 
     #[link(name = "user32")]
     extern "system" {
@@ -41,6 +58,7 @@ mod imp {
         fn GetWindow(window: isize, command: u32) -> isize;
         fn IsWindowVisible(window: isize) -> i32;
         fn GetWindowTextLengthW(window: isize) -> i32;
+        fn IsIconic(window: isize) -> i32;
     }
 
     #[repr(C)]
@@ -97,6 +115,17 @@ mod imp {
     pub fn remember() {
         if MAIN_WINDOW.load(Ordering::Relaxed) == 0 {
             unsafe { EnumWindows(visit, 0) };
+        }
+    }
+
+    pub fn minimise() -> bool {
+        let window = MAIN_WINDOW.load(Ordering::Relaxed);
+        if window == 0 {
+            return false;
+        }
+        unsafe {
+            ShowWindow(window, SW_MINIMIZE);
+            IsIconic(window) != 0
         }
     }
 

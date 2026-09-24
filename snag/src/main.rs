@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod autostart;
 mod bootstrap;
 mod clipboard;
 mod filmstrip;
@@ -13,6 +14,7 @@ mod probe;
 mod remux;
 mod selfupdate;
 mod settings;
+mod shortcut;
 mod theme;
 mod tray;
 mod ui;
@@ -134,6 +136,13 @@ fn startup_should_download() -> bool {
     std::env::args().any(|a| a == "--download")
 }
 
+/// `snag --tray` goes straight to the tray without showing a window, which
+/// is what the autostart shortcut passes. Ignored when there is no tray to
+/// go to, since that would leave no way to get the window back.
+fn startup_tray() -> bool {
+    std::env::args().any(|a| a == autostart::TRAY_ARG)
+}
+
 /// `snag --view=<name>` opens straight to a screen instead of the link box.
 fn startup_view() -> Option<app::View> {
     std::env::args()
@@ -184,6 +193,9 @@ fn main() -> eframe::Result<()> {
             }
             if let Some(v) = startup_view() {
                 app.view = v;
+            }
+            if startup_tray() {
+                app.start_hidden = true;
             }
             Ok(Box::new(app))
         }),

@@ -251,6 +251,11 @@ pub struct SnagApp {
 
     /// Set while the window is hidden and Snag is only in the tray.
     pub hidden: bool,
+    /// Set before the first frame to go straight to the tray, from the
+    /// setting or from `--tray`. Cleared once it has happened.
+    pub start_hidden: bool,
+    /// When to stop insisting on that, see `apply_start_hidden`.
+    start_hidden_until: Option<Instant>,
     /// Whether the window is the one in front, as of the last frame.
     pub focused: bool,
     /// The last sane window size seen while visible. Hiding a viewport loses
@@ -359,6 +364,8 @@ impl SnagApp {
             thumb_rx,
             history: History::load(),
             hidden: false,
+            start_hidden: settings.background.start_in_tray,
+            start_hidden_until: None,
             focused: true,
 
             tray: None,
@@ -1394,6 +1401,16 @@ impl SnagApp {
             self.tray = None;
         }
 
+        // Starting with the computer is a change outside snag's own files,
+        // so it is only made when it is actually different, and the switch
+        // is put back if the shell refuses.
+        let want_autostart =
+            self.settings.background.start_with_windows && crate::autostart::supported();
+        if want_autostart != crate::autostart::enabled() && !crate::autostart::set(want_autostart) {
+            self.toast("could not change the startup entry", true);
+            self.settings.background.start_with_windows = !want_autostart;
+        }
+
         self.clip_restore.store(
             self.settings.background.show_on_copied_link,
             Ordering::Relaxed,
@@ -1423,6 +1440,8 @@ impl SnagApp {
 
     /// Bring the window back from the tray, at the size it had before.
     fn show_window(&mut self, ctx: &egui::Context) {
+        // Asked for the window, so stop trying to start in the tray.
+        self.start_hidden = false;
         self.hidden = false;
         self.clip_hidden.store(false, Ordering::Relaxed);
         crate::window::restore();
@@ -1440,12 +1459,82 @@ impl SnagApp {
         self.focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
     }
 
+    /// Go to the tray before the window has been seen, for an autostarted
+    /// copy or someone who asked to start that way. Only once, and only when
+    /// there is a tray to come back from.
+    fn apply_start_hidden(&mut self, ctx: &egui::Context) {
+        if !self.start_hidden {
+            return;
+        }
+        if self.tray.is_none() {
+            // Nothing to come back from, so the window stays.
+            self.start_hidden = false;
+            return;
+        }
+        // The window does not exist for the first frame or two, and a
+        // request to minimise one that is not there is simply dropped, so
+        // this keeps asking until it lands and gives up rather than flicker
+        // for longer than a moment.
+        // One request is not enough. The window does not exist for the
+        // first frame or two, and for a few frames after that winit shows it
+        // again as it finishes setting it up, undoing an early minimise. So
+        // this insists for a moment and then stops, rather than fighting the
+        // user if they bring the window up straight away.
+        let deadline = *self
+            .start_hidden_until
+            .get_or_insert_with(|| Instant::now() + std::time::Duration::from_millis(1500));
+        if crate::window::minimise() {
+            self.hidden = true;
+            self.clip_hidden.store(true, Ordering::Relaxed);
+        }
+        if Instant::now() >= deadline {
+            self.start_hidden = false;
+        }
+        ctx.request_repaint();
+    }
+
+    /// Keep the tray tooltip telling the truth: a waiting link outranks
+    /// running downloads, since it is the one thing needing a decision.
+    fn update_tray_status(&self) {
+        if let Some(tray) = &self.tray {
+            tray.set_status(self.offered_link.is_some(), self.active_job_count());
+        }
+    }
+
     fn handle_tray(&mut self, ctx: &egui::Context) {
         let Some(command) = self.tray.as_ref().and_then(Tray::poll) else {
             return;
         };
         match command {
             TrayCommand::Show => self.show_window(ctx),
+            TrayCommand::DownloadCopied => {
+                // The offered link if there is one, since that is the link
+                // the tooltip has been advertising; otherwise whatever is on
+                // the clipboard right now.
+                let url = self
+                    .offered_link
+                    .take()
+                    .or_else(crate::util::clipboard_text)
+                    .map(|u| u.trim().to_string())
+                    .filter(|u| crate::util::looks_like_url(u));
+                match url {
+                    Some(url) => {
+                        let queued = self.queue_url(url);
+                        if !queued {
+                            self.notify_away("Already queued", "That link is in the queue.");
+                        }
+                    }
+                    None => {
+                        // Said out loud, because a tray click with a hidden
+                        // window has nowhere else to report to.
+                        self.notify_away(
+                            "Nothing to download",
+                            "There is no link on the clipboard.",
+                        );
+                        self.toast("no link on the clipboard", true);
+                    }
+                }
+            }
             TrayCommand::Quit => {
                 // A real quit, not another trip to the tray.
                 self.settings.background.run_in_background = false;
@@ -1481,23 +1570,50 @@ impl SnagApp {
             {
                 continue;
             }
+            // Asked for: copy a link and it downloads, no window, no
+            // decision. The watcher has already said so with a notification.
+            if self.settings.background.auto_download_copied {
+                self.queue_url(found.url.clone());
+                ctx.request_repaint();
+                continue;
+            }
+
             self.offered_link = Some(found.url.clone());
 
             // Notifying and raising the window are done by the watcher itself,
             // which is still awake when this loop is not.
-            if let Some(tray) = &self.tray {
-                tray.set_pending(true);
+            if self.settings.background.show_on_copied_link {
+                // The watcher raised the window, so the app is no longer in
+                // the tray as far as everything else is concerned.
+                self.hidden = false;
             }
-            self.hidden = false;
             ctx.request_repaint();
         }
     }
 
+    /// Queue one link with the current mode, as the tray and the clipboard
+    /// watcher do when nobody is looking at the window. False when it was
+    /// already in the queue.
+    pub fn queue_url(&mut self, url: String) -> bool {
+        if self.jobs.iter().any(|j| j.url == url) {
+            return false;
+        }
+        let overrides = JobOverrides {
+            height: self.height_override,
+            ..Default::default()
+        };
+        self.jobs.push(Job::new(url, self.mode, overrides));
+        let short = if self.mode == Mode::Audio {
+            "queued the copied link as audio"
+        } else {
+            "queued the copied link"
+        };
+        self.toast(short, false);
+        true
+    }
+
     /// Accept the offered link: fill the box and bring Snag forward.
     pub fn accept_offered_link(&mut self, ctx: &egui::Context) {
-        if let Some(tray) = &self.tray {
-            tray.set_pending(false);
-        }
         if let Some(url) = self.offered_link.take() {
             self.url_input = url;
             self.view = View::Home;
@@ -1574,6 +1690,7 @@ impl eframe::App for SnagApp {
         self.pump_probe(ctx);
         self.pump_filmstrip(ctx);
         self.track_window(ctx);
+        self.apply_start_hidden(ctx);
         self.handle_tray(ctx);
         self.drain_clipboard(ctx);
         self.handle_shortcuts(ctx);
@@ -1588,6 +1705,7 @@ impl eframe::App for SnagApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
         self.handle_dropped_files(ctx);
+        self.update_tray_status();
         self.autosave(ctx);
 
         // Keep the clock ticking while anything is in flight, for speed/ETA text.

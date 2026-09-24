@@ -461,6 +461,14 @@ pub struct BackgroundSettings {
     /// Bring the window back when a link is copied. Off by default: hiding
     /// Snag is a request to be left alone.
     pub show_on_copied_link: bool,
+    /// Download a copied link straight away rather than offering it. The
+    /// fastest way to use Snag and the one that takes a decision away, so
+    /// off unless asked for.
+    pub auto_download_copied: bool,
+    /// Start with the computer, in the tray.
+    pub start_with_windows: bool,
+    /// Go straight to the tray at launch instead of opening a window.
+    pub start_in_tray: bool,
     /// Desktop notifications: a download finishing or failing while Snag is
     /// not the window in front, and a copied link while it is hidden. On by
     /// default, since a download is exactly the kind of thing you walk away
@@ -474,6 +482,9 @@ impl Default for BackgroundSettings {
             run_in_background: false,
             watch_clipboard: false,
             show_on_copied_link: false,
+            auto_download_copied: false,
+            start_with_windows: false,
+            start_in_tray: false,
             notifications: true,
         }
     }

@@ -17,6 +17,9 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayCommand {
     Show,
+    /// Take whatever link is on the clipboard and download it, without the
+    /// window coming up at all. The whole point of living in the tray.
+    DownloadCopied,
     Quit,
 }
 
@@ -31,7 +34,11 @@ mod imp {
     pub struct Tray {
         _icon: TrayIcon,
         show_id: tray_icon::menu::MenuId,
+        copied_id: tray_icon::menu::MenuId,
         quit_id: tray_icon::menu::MenuId,
+        /// What the tooltip currently says, so it is only rewritten when it
+        /// would change rather than on every frame.
+        tooltip: std::cell::RefCell<String>,
     }
 
     /// Build the tray icon. Returns None if the desktop would not take it,
@@ -41,8 +48,10 @@ mod imp {
         let image = tray_icon::Icon::from_rgba(rgba, width, height).ok()?;
 
         let menu = Menu::new();
+        let copied = MenuItem::new("Download what I copied", true, None);
         let show = MenuItem::new("Show Snag", true, None);
         let quit = MenuItem::new("Quit", true, None);
+        menu.append(&copied).ok()?;
         menu.append(&show).ok()?;
         menu.append(&tray_icon::menu::PredefinedMenuItem::separator())
             .ok()?;
@@ -58,20 +67,27 @@ mod imp {
         Some(Tray {
             _icon: icon,
             show_id: show.id().clone(),
+            copied_id: copied.id().clone(),
             quit_id: quit.id().clone(),
+            tooltip: std::cell::RefCell::new("Snag".to_string()),
         })
     }
 
     impl Tray {
-        /// Say in the tooltip that something is waiting, since a hidden window
-        /// cannot.
-        pub fn set_pending(&self, pending: bool) {
-            let text = if pending {
-                "Snag - a copied link is waiting"
-            } else {
-                "Snag"
+        /// Say what Snag is up to, since a hidden window cannot: a copied
+        /// link waiting to be taken, or downloads in flight.
+        pub fn set_status(&self, pending: bool, active: usize) {
+            let text = match (pending, active) {
+                (true, _) => "Snag - a copied link is waiting".to_string(),
+                (false, 0) => "Snag".to_string(),
+                (false, 1) => "Snag - 1 download running".to_string(),
+                (false, n) => format!("Snag - {n} downloads running"),
             };
-            let _ = self._icon.set_tooltip(Some(text));
+            let mut current = self.tooltip.borrow_mut();
+            if *current != text {
+                let _ = self._icon.set_tooltip(Some(&text));
+                *current = text;
+            }
         }
 
         /// Non-blocking: drains whatever the tray has reported since last frame.
@@ -86,6 +102,9 @@ mod imp {
             while let Ok(event) = MenuEvent::receiver().try_recv() {
                 if event.id == self.show_id {
                     return Some(TrayCommand::Show);
+                }
+                if event.id == self.copied_id {
+                    return Some(TrayCommand::DownloadCopied);
                 }
                 if event.id == self.quit_id {
                     return Some(TrayCommand::Quit);
@@ -108,7 +127,7 @@ mod imp {
     }
 
     impl Tray {
-        pub fn set_pending(&self, _pending: bool) {}
+        pub fn set_status(&self, _pending: bool, _active: usize) {}
 
         pub fn poll(&self) -> Option<TrayCommand> {
             None

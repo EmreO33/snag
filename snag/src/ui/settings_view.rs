@@ -580,6 +580,32 @@ fn background(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
             "closing the window puts snag in the system tray instead of quitting it. click the tray icon to bring it back, or use quit there to close it properly.",
             &mut app.settings.background.run_in_background,
         );
+
+        if app.settings.background.run_in_background {
+            changed |= theme::toggle_row(
+                ui,
+                &p,
+                "start in the tray",
+                "launch straight to the tray instead of opening a window. snag is there when you need it and out of the way when you do not.",
+                &mut app.settings.background.start_in_tray,
+            );
+
+            if crate::autostart::supported() {
+                changed |= theme::toggle_row(
+                    ui,
+                    &p,
+                    "start with windows",
+                    "puts a shortcut in your startup folder, so snag is already in the tray when you copy your first link. delete it there or turn this off to stop.",
+                    &mut app.settings.background.start_with_windows,
+                );
+            }
+
+            theme::note_text(
+                ui,
+                &p,
+                "right click the tray icon for \"download what i copied\": one click, no window, no typing.",
+            );
+        }
     } else {
         theme::card(ui, &p, |ui| {
             ui.label(
@@ -612,6 +638,21 @@ fn background(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
             "off by default, because hiding snag is a request to be left alone. with this off, a copied link is a notification and a mark on the tray icon.",
             &mut app.settings.background.show_on_copied_link,
         );
+
+        changed |= theme::toggle_row(
+            ui,
+            &p,
+            "just download what i copy",
+            "no offer and no window: a copied link goes straight into the queue with the mode and quality currently set. the fastest snag gets, and the one that takes the decision away, so look at those settings before turning it on.",
+            &mut app.settings.background.auto_download_copied,
+        );
+        if app.settings.background.auto_download_copied {
+            theme::note_text(
+                ui,
+                &p,
+                "every link you copy while this is on is downloaded, including ones you copied for some other reason.",
+            );
+        }
     }
 
     theme::section_title(ui, &p, "notifications");
