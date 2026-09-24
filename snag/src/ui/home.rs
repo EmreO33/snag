@@ -3,6 +3,7 @@ use egui::{Key, Rounding, Vec2};
 
 use crate::app::{PlaylistChoice, SnagApp, View};
 use crate::jobs::JobState;
+use crate::motion;
 use crate::settings::Mode;
 use crate::theme;
 use crate::util;
@@ -279,7 +280,17 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
 
     let thumbnail = app.thumbnail.clone();
 
+    // Keyed on the link, so each new answer fades up rather than the card
+    // flicking from one video's details to another's.
+    let arrived = motion::on_off(
+        ui.ctx(),
+        egui::Id::new(("preview", probe.url.as_str())),
+        true,
+        motion::ENTER,
+    );
+
     ui.add_space(12.0);
+    ui.set_opacity(arrived);
     theme::card(ui, p, |ui| {
         ui.horizontal(|ui| {
             // The preview image, when the site had one and it arrived.
@@ -296,11 +307,19 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
                 let size = egui::Vec2::new(height * aspect, height);
                 let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
                 if ui.is_rect_visible(rect) {
+                    // The picture arrives seconds after the card, from the
+                    // network, so it gets a fade of its own.
+                    let shown = motion::on_off(
+                        ui.ctx(),
+                        egui::Id::new(("thumb", texture.id())),
+                        true,
+                        motion::ENTER,
+                    );
                     ui.painter().image(
                         texture.id(),
                         rect,
                         egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                        egui::Color32::WHITE,
+                        egui::Color32::WHITE.gamma_multiply(shown),
                     );
                 }
                 ui.add_space(10.0);

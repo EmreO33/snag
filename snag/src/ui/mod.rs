@@ -12,6 +12,7 @@ use egui::{Color32, FontFamily, FontId, Rounding, Sense, Stroke, Vec2};
 
 use crate::app::{SnagApp, View};
 use crate::jobs::JobState;
+use crate::motion;
 use crate::theme::Palette;
 use crate::updater::UpdateState;
 
@@ -42,26 +43,30 @@ fn nav_item(
     });
 
     if ui.is_rect_visible(rect) {
-        let hovered = response.hovered();
-        let fill = if selected {
-            p.card
-        } else if hovered {
-            p.panel
-        } else {
-            Color32::TRANSPARENT
-        };
+        let hover_t = motion::on_off(
+            ui.ctx(),
+            response.id.with("hover"),
+            response.hovered(),
+            motion::HOVER,
+        );
+        let select_t = motion::on_off(
+            ui.ctx(),
+            response.id.with("select"),
+            selected,
+            motion::SWITCH,
+        );
+        let fill = motion::mix(
+            motion::mix(Color32::TRANSPARENT, p.panel, hover_t),
+            p.card,
+            select_t,
+        );
         ui.painter().rect_filled(rect, Rounding::same(9.0), fill);
 
-        if selected {
-            // A small accent tick marks the active screen.
-            let bar = egui::Rect::from_min_size(
-                egui::pos2(rect.left() + 3.0, rect.center().y - 7.0),
-                Vec2::new(3.0, 14.0),
-            );
-            ui.painter().rect_filled(bar, Rounding::same(2.0), p.accent);
-        }
+        // The accent mark that says which screen you are on is not drawn
+        // here: there is one of it for the whole rail, and it slides. See
+        // `sidebar`.
 
-        let color = if selected { p.text } else { p.dim };
+        let color = motion::mix(p.dim, p.text, select_t);
         ui.painter().text(
             egui::pos2(rect.left() + 14.0, rect.center().y),
             egui::Align2::LEFT_CENTER,
@@ -121,35 +126,67 @@ pub fn sidebar(app: &mut SnagApp, ctx: &egui::Context) {
 
             ui.spacing_mut().item_spacing.y = 4.0;
 
-            if nav_item(ui, &p, "save", None, app.view == View::Home).clicked() {
+            // Where the accent mark should be: the row of the screen you are
+            // on. Collected while the rows are drawn and used afterwards.
+            let mut mark: Option<egui::Rect> = None;
+            let mut item = |ui: &mut egui::Ui, label: &str, badge, view: View, current: View| {
+                let response = nav_item(ui, &p, label, badge, current == view);
+                if current == view {
+                    mark = Some(response.rect);
+                }
+                response.clicked()
+            };
+
+            let current = app.view;
+            if item(ui, "save", None, View::Home, current) {
                 app.view = View::Home;
             }
             let badge = (pending > 0).then(|| pending.to_string());
-            if nav_item(ui, &p, "queue", badge, app.view == View::Queue).clicked() {
+            if item(ui, "queue", badge, View::Queue, current) {
                 app.view = View::Queue;
             }
-            if nav_item(ui, &p, "remux", None, app.view == View::Remux).clicked() {
+            if item(ui, "remux", None, View::Remux, current) {
                 app.view = View::Remux;
             }
-            if nav_item(ui, &p, "history", None, app.view == View::History).clicked() {
+            if item(ui, "history", None, View::History, current) {
                 app.view = View::History;
             }
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
                 ui.spacing_mut().item_spacing.y = 4.0;
                 ui.add_space(4.0);
-                if nav_item(ui, &p, "about", None, app.view == View::About).clicked() {
+                if item(ui, "about", None, View::About, current) {
                     app.view = View::About;
                 }
                 let update_badge = matches!(app.update_state, UpdateState::Available { .. })
                     .then(|| "!".to_string());
-                if nav_item(ui, &p, "updates", update_badge, app.view == View::Updates).clicked() {
+                if item(ui, "updates", update_badge, View::Updates, current) {
                     app.view = View::Updates;
                 }
-                if nav_item(ui, &p, "settings", None, app.view == View::Settings).clicked() {
+                if item(ui, "settings", None, View::Settings, current) {
                     app.view = View::Settings;
                 }
             });
+
+            // One mark for the whole rail, which travels to the row you
+            // picked instead of blinking out of one row and into another.
+            // Painted last so it sits on top of the row fills.
+            if let Some(rect) = mark {
+                let y = motion::toward(
+                    ui.ctx(),
+                    egui::Id::new("nav_mark_y"),
+                    rect.center().y,
+                    motion::SWITCH,
+                );
+                if (y - rect.center().y).abs() > 0.5 {
+                    ui.ctx().request_repaint();
+                }
+                let bar = egui::Rect::from_center_size(
+                    egui::pos2(rect.left() + 4.5, y),
+                    Vec2::new(3.0, 14.0),
+                );
+                ui.painter().rect_filled(bar, Rounding::same(2.0), p.accent);
+            }
         });
 }
 
@@ -176,11 +213,16 @@ pub fn status_bar(app: &mut SnagApp, ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 match &toast {
                     Some((text, bad, age)) => {
-                        let alpha = if *age > 4.0 { 5.0 - *age } else { 1.0 };
+                        let arriving = motion::ramp(*age, motion::ENTER);
+                        let leaving = if *age > 4.0 { 5.0 - *age } else { 1.0 };
                         let base = if *bad { p.bad } else { p.good };
-                        let color = base.gamma_multiply(alpha.clamp(0.0, 1.0));
+                        let color = base.gamma_multiply((arriving * leaving).clamp(0.0, 1.0));
+                        // Slides in from the left by a few pixels as it fades.
+                        ui.add_space((1.0 - arriving) * 8.0);
                         ui.label(egui::RichText::new(text).size(12.0).color(color));
-                        ctx.request_repaint_after(std::time::Duration::from_millis(120));
+                        ctx.request_repaint_after(std::time::Duration::from_millis(
+                            if arriving < 1.0 { 16 } else { 120 },
+                        ));
                     }
                     None => {
                         let active = app.active_job_count();

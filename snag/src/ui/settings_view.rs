@@ -110,6 +110,14 @@ fn appearance(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         &mut app.settings.appearance.compact_queue,
     );
 
+    changed |= theme::toggle_row(
+        ui,
+        &p,
+        "animations",
+        "hovers that fade, a marker that slides between screens, progress that catches up smoothly. turning this off makes every change instant.",
+        &mut app.settings.appearance.animations,
+    );
+
     changed
 }
 

@@ -7,6 +7,7 @@ use egui::{
     Ui, Vec2,
 };
 
+use crate::motion;
 use crate::settings::{Accent, ThemeMode};
 
 #[derive(Clone, Copy)]
@@ -189,11 +190,11 @@ fn announce_selected(
 
 pub fn pill(ui: &mut Ui, p: &Palette, text: &str, selected: bool, enabled: bool) -> Response {
     let font = FontId::new(14.0, FontFamily::Monospace);
-    let galley = ui.painter().layout_no_wrap(
-        text.to_string(),
-        font,
-        if selected { p.on_accent } else { p.text },
-    );
+    // Laid out without a colour of its own, so the colour can be decided
+    // once the hover state is known and moved between two values.
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_string(), font, Color32::PLACEHOLDER);
     let padding = Vec2::new(14.0, 8.0);
     let size = galley.size() + padding * 2.0;
     let (rect, response) = ui.allocate_exact_size(
@@ -207,19 +208,30 @@ pub fn pill(ui: &mut Ui, p: &Palette, text: &str, selected: bool, enabled: bool)
 
     if ui.is_rect_visible(rect) {
         let hovered = response.hovered() && enabled;
-        let fill = if selected {
-            p.accent
-        } else if hovered {
-            p.well
-        } else {
-            Color32::TRANSPARENT
-        };
-        let text_color = if selected {
-            p.on_accent
-        } else if enabled {
-            p.text
+        let hover_t = motion::on_off(ui.ctx(), response.id.with("hover"), hovered, motion::HOVER);
+        let select_t = motion::on_off(
+            ui.ctx(),
+            response.id.with("select"),
+            selected,
+            motion::SWITCH,
+        );
+
+        let fill = motion::mix(
+            motion::mix(Color32::TRANSPARENT, p.well, hover_t),
+            p.accent,
+            select_t,
+        );
+        let text_color = if enabled {
+            motion::mix(p.text, p.on_accent, select_t)
         } else {
             p.faint
+        };
+        // A pressed pill sinks a pixel, the cheapest way to make a click
+        // feel like it landed on something.
+        let rect = if response.is_pointer_button_down_on() {
+            rect.shrink(1.0)
+        } else {
+            rect
         };
         ui.painter().rect_filled(rect, Rounding::same(9.0), fill);
         let pos = rect.center() - galley.size() * 0.5;
@@ -288,17 +300,19 @@ pub fn action_button(
 
     if ui.is_rect_visible(rect) {
         let hovered = response.hovered() && enabled;
+        let hover_t = motion::on_off(ui.ctx(), response.id.with("hover"), hovered, motion::HOVER);
         let (fill, fg) = match (primary, enabled) {
             (_, false) => (p.card, p.faint),
             (true, true) => (
-                if hovered {
-                    p.accent.linear_multiply(0.82)
-                } else {
-                    p.accent
-                },
+                motion::mix(p.accent, p.accent.linear_multiply(0.82), hover_t),
                 p.on_accent,
             ),
-            (false, true) => (if hovered { p.well } else { p.card }, p.text),
+            (false, true) => (motion::mix(p.card, p.well, hover_t), p.text),
+        };
+        let rect = if response.is_pointer_button_down_on() {
+            rect.shrink(1.0)
+        } else {
+            rect
         };
         ui.painter().rect_filled(rect, Rounding::same(10.0), fill);
         if !primary {
@@ -328,8 +342,8 @@ pub fn toggle(ui: &mut Ui, p: &Palette, on: &mut bool) -> Response {
     }
 
     if ui.is_rect_visible(rect) {
-        let t = ui.ctx().animate_bool(response.id, *on);
-        let track = if *on { p.accent } else { p.well };
+        let t = motion::on_off(ui.ctx(), response.id, *on, motion::SWITCH);
+        let track = motion::mix(p.well, p.accent, t);
         let radius = rect.height() * 0.5;
         ui.painter()
             .rect_filled(rect, Rounding::same(radius), track);
@@ -338,7 +352,7 @@ pub fn toggle(ui: &mut Ui, p: &Palette, on: &mut bool) -> Response {
                 .rect_stroke(rect, Rounding::same(radius), Stroke::new(1.0_f32, p.line));
         }
         let knob_x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), t);
-        let knob_color = if *on { p.on_accent } else { p.text };
+        let knob_color = motion::mix(p.text, p.on_accent, t);
         ui.painter().circle_filled(
             egui::pos2(knob_x, rect.center().y),
             radius - 4.0,
@@ -371,32 +385,48 @@ pub fn checkbox(ui: &mut Ui, p: &Palette, on: &mut bool, label: &str) -> Respons
     }
 
     if ui.is_rect_visible(rect) {
-        if response.hovered() {
-            ui.painter().rect_filled(rect, Rounding::same(6.0), p.card);
-        }
+        let hover_t = motion::on_off(
+            ui.ctx(),
+            response.id.with("hover"),
+            response.hovered(),
+            motion::HOVER,
+        );
+        let tick_t = motion::on_off(ui.ctx(), response.id.with("tick"), *on, motion::HOVER);
+        ui.painter().rect_filled(
+            rect,
+            Rounding::same(6.0),
+            motion::mix(Color32::TRANSPARENT, p.card, hover_t),
+        );
         let box_rect = egui::Rect::from_center_size(
             egui::pos2(rect.left() + box_size * 0.5 + 2.0, rect.center().y),
             Vec2::splat(box_size),
         );
-        if *on {
-            ui.painter()
-                .rect_filled(box_rect, Rounding::same(4.0), p.accent);
-            // The tick.
+        // The box fills and the tick draws itself on from the same run of
+        // the animation, so ticking a row reads as one movement.
+        ui.painter().rect_filled(
+            box_rect,
+            Rounding::same(4.0),
+            motion::mix(Color32::TRANSPARENT, p.accent, tick_t),
+        );
+        if tick_t < 1.0 {
+            ui.painter().rect_stroke(
+                box_rect,
+                Rounding::same(4.0),
+                Stroke::new(1.0_f32, motion::mix(p.line, Color32::TRANSPARENT, tick_t)),
+            );
+        }
+        if tick_t > 0.0 {
             let c = box_rect.center();
+            let ink = p.on_accent.gamma_multiply(tick_t);
+            let short = egui::pos2(c.x - 1.0, c.y + 3.0);
             ui.painter().line_segment(
-                [egui::pos2(c.x - 4.0, c.y), egui::pos2(c.x - 1.0, c.y + 3.0)],
-                Stroke::new(2.0_f32, p.on_accent),
+                [egui::pos2(c.x - 4.0, c.y), short],
+                Stroke::new(2.0_f32, ink),
             );
             ui.painter().line_segment(
-                [
-                    egui::pos2(c.x - 1.0, c.y + 3.0),
-                    egui::pos2(c.x + 4.5, c.y - 3.5),
-                ],
-                Stroke::new(2.0_f32, p.on_accent),
+                [short, egui::pos2(c.x + 4.5, c.y - 3.5)],
+                Stroke::new(2.0_f32, ink),
             );
-        } else {
-            ui.painter()
-                .rect_stroke(box_rect, Rounding::same(4.0), Stroke::new(1.0_f32, p.line));
         }
         let text_pos = egui::pos2(
             box_rect.right() + 8.0,
@@ -497,9 +527,22 @@ pub fn progress_bar(ui: &mut Ui, p: &Palette, fraction: f32, indeterminate: bool
         ui.painter().rect_filled(bar, Rounding::same(3.0), p.accent);
         ui.ctx().request_repaint();
     } else if fraction > 0.0 {
+        // yt-dlp reports in jumps, and a bar that jumps looks like it is
+        // struggling. This one is always on its way to the last number it
+        // was given, which is prettier and no less honest: progress was an
+        // estimate either way.
+        let shown = motion::toward(
+            ui.ctx(),
+            ui.id().with("progress"),
+            fraction.clamp(0.0, 1.0),
+            0.35,
+        );
+        if (shown - fraction).abs() > 0.001 {
+            ui.ctx().request_repaint();
+        }
         let bar = Rect::from_min_size(
             rect.min,
-            Vec2::new(rect.width() * fraction.clamp(0.0, 1.0), rect.height()),
+            Vec2::new(rect.width() * shown.clamp(0.0, 1.0), rect.height()),
         );
         ui.painter().rect_filled(bar, Rounding::same(3.0), p.accent);
     }

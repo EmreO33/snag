@@ -9,6 +9,7 @@ mod history;
 mod icon;
 mod installer;
 mod jobs;
+mod motion;
 mod notify;
 mod probe;
 mod remux;

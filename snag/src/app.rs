@@ -250,6 +250,10 @@ pub struct SnagApp {
     pub history: History,
 
     /// Set while the window is hidden and Snag is only in the tray.
+    /// The screen shown last frame and when it last changed, so a new one
+    /// can arrive rather than appear.
+    pub shown_view: View,
+    pub view_changed_at: Instant,
     pub hidden: bool,
     /// Set before the first frame to go straight to the tray, from the
     /// setting or from `--tray`. Cleared once it has happened.
@@ -363,6 +367,8 @@ impl SnagApp {
             thumb_tx,
             thumb_rx,
             history: History::load(),
+            shown_view: View::Home,
+            view_changed_at: Instant::now(),
             hidden: false,
             start_hidden: settings.background.start_in_tray,
             start_hidden_until: None,
@@ -410,6 +416,11 @@ impl SnagApp {
         if let Some(warning) = load_warning {
             app.toast(warning, true);
         }
+
+        // The appearance is already applied at this point, so the motion
+        // switch has to be set here too: sync_theme only runs when the
+        // appearance changes, and at launch it has not.
+        crate::motion::set_enabled(app.settings.appearance.animations);
 
         app.sync_background_features(&cc.egui_ctx);
 
@@ -1655,6 +1666,7 @@ impl SnagApp {
                 self.settings.appearance.accent,
             );
             theme::apply(ctx, &self.palette, self.settings.appearance.ui_scale);
+            crate::motion::set_enabled(self.settings.appearance.animations);
             self.applied_appearance = self.settings.appearance.clone();
         }
     }
@@ -1719,21 +1731,36 @@ impl eframe::App for SnagApp {
             ui::status_bar(self, ctx);
         }
 
+        // A screen that has just been switched to fades up and settles the
+        // last few pixels, so the eye is led to it rather than startled by
+        // it. Three frames' worth, no more.
+        if self.shown_view != self.view {
+            self.shown_view = self.view;
+            self.view_changed_at = Instant::now();
+        }
+        let arrived = crate::motion::since(self.view_changed_at, crate::motion::SWITCH);
+        if arrived < 1.0 {
+            ctx.request_repaint();
+        }
+
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::none()
                     .fill(self.palette.bg)
-                    .inner_margin(egui::Margin::symmetric(28.0, 22.0)),
+                    .inner_margin(egui::Margin::symmetric(28.0, 22.0 + (1.0 - arrived) * 6.0)),
             )
-            .show(ctx, |ui| match self.view {
-                View::Setup => ui::setup::view(self, ui),
-                View::Home => ui::home::view(self, ui),
-                View::History => ui::history_view::view(self, ui),
-                View::Queue => ui::queue::view(self, ui),
-                View::Remux => ui::remux_view::view(self, ui),
-                View::Settings => ui::settings_view::view(self, ui),
-                View::Updates => ui::updates_view::view(self, ui),
-                View::About => ui::about::view(self, ui),
+            .show(ctx, |ui| {
+                ui.set_opacity(arrived);
+                match self.view {
+                    View::Setup => ui::setup::view(self, ui),
+                    View::Home => ui::home::view(self, ui),
+                    View::History => ui::history_view::view(self, ui),
+                    View::Queue => ui::queue::view(self, ui),
+                    View::Remux => ui::remux_view::view(self, ui),
+                    View::Settings => ui::settings_view::view(self, ui),
+                    View::Updates => ui::updates_view::view(self, ui),
+                    View::About => ui::about::view(self, ui),
+                }
             });
     }
 

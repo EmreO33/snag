@@ -293,6 +293,10 @@ pub struct Appearance {
     pub accent: Accent,
     pub ui_scale: f32,
     pub compact_queue: bool,
+    /// Hovers that fade, selections that slide, screens that arrive. On by
+    /// default; off is a flat instant interface, which is what some people
+    /// want and what some machines need.
+    pub animations: bool,
 }
 
 impl Default for Appearance {
@@ -302,6 +306,7 @@ impl Default for Appearance {
             accent: Accent::Mono,
             ui_scale: 1.0,
             compact_queue: false,
+            animations: true,
         }
     }
 }
