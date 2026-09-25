@@ -20,6 +20,12 @@ use crate::ui;
 use crate::updater::{self, UpdateEvent, UpdateState};
 use crate::youtube::SignInState;
 
+/// Whether this launch is going straight to the tray, from the setting or
+/// from the `--tray` an autostarted copy is given.
+pub fn launched_into_tray(settings: &Settings) -> bool {
+    settings.background.start_in_tray || std::env::args().any(|a| a == crate::autostart::TRAY_ARG)
+}
+
 /// How much of a playlist link to take.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlaylistChoice {
@@ -258,16 +264,11 @@ pub struct SnagApp {
     pub shown_view: View,
     pub view_changed_at: Instant,
     pub hidden: bool,
-    /// Set before the first frame to go straight to the tray, from the
-    /// setting or from `--tray`. Cleared once it has happened.
-    pub start_hidden: bool,
     /// When to quit for an update that is waiting for this process to go.
     /// Nothing else sets it: this is a real quit, not a trip to the tray.
     quit_at: Option<Instant>,
     /// Set once the close is a real one, so closing to the tray is skipped.
     quitting: bool,
-    /// When to stop insisting on that, see `apply_start_hidden`.
-    start_hidden_until: Option<Instant>,
     /// Whether the window is the one in front, as of the last frame.
     pub focused: bool,
     /// The last sane window size seen while visible. Hiding a viewport loses
@@ -327,6 +328,12 @@ pub struct SnagApp {
 impl SnagApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let (settings, load_warning) = Settings::load();
+
+        // A launch that belongs in the tray. The window has already been put
+        // there, before it could be seen, by the watcher main starts for
+        // exactly that (see `window::park_in_tray`). All that is left here is
+        // to agree with it.
+        let in_tray = launched_into_tray(&settings);
         let palette = theme::palette(settings.appearance.theme, settings.appearance.accent);
         theme::apply(&cc.egui_ctx, &palette, settings.appearance.ui_scale);
 
@@ -381,11 +388,9 @@ impl SnagApp {
             history: History::load(),
             shown_view: View::Home,
             view_changed_at: Instant::now(),
-            hidden: false,
-            start_hidden: settings.background.start_in_tray,
+            hidden: in_tray,
             quit_at: None,
             quitting: false,
-            start_hidden_until: None,
             focused: true,
 
             tray: None,
@@ -437,6 +442,20 @@ impl SnagApp {
         crate::motion::set_enabled(app.settings.appearance.animations);
 
         app.sync_background_features(&cc.egui_ctx);
+
+        // The window was created out of sight on the promise of a tray icon
+        // to bring it back. If that icon could not be made, showing the
+        // window is the only thing that stops this being a process nobody
+        // can reach.
+        if in_tray {
+            if app.tray.is_some() {
+                app.clip_hidden.store(true, Ordering::Relaxed);
+            } else {
+                app.hidden = false;
+                cc.egui_ctx
+                    .send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            }
+        }
 
         if needs_setup {
             app.start_detection(&cc.egui_ctx);
@@ -1478,8 +1497,6 @@ impl SnagApp {
 
     /// Bring the window back from the tray, at the size it had before.
     fn show_window(&mut self, ctx: &egui::Context) {
-        // Asked for the window, so stop trying to start in the tray.
-        self.start_hidden = false;
         self.hidden = false;
         self.clip_hidden.store(false, Ordering::Relaxed);
         if !crate::window::restore() {
@@ -1502,40 +1519,6 @@ impl SnagApp {
         // None means the platform did not say, which is taken as "in front"
         // so nothing is notified twice for want of an answer.
         self.focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
-    }
-
-    /// Go to the tray before the window has been seen, for an autostarted
-    /// copy or someone who asked to start that way. Only once, and only when
-    /// there is a tray to come back from.
-    fn apply_start_hidden(&mut self, ctx: &egui::Context) {
-        if !self.start_hidden {
-            return;
-        }
-        if self.tray.is_none() {
-            // Nothing to come back from, so the window stays.
-            self.start_hidden = false;
-            return;
-        }
-        // The window does not exist for the first frame or two, and a
-        // request to minimise one that is not there is simply dropped, so
-        // this keeps asking until it lands and gives up rather than flicker
-        // for longer than a moment.
-        // One request is not enough. The window does not exist for the
-        // first frame or two, and for a few frames after that winit shows it
-        // again as it finishes setting it up, undoing an early hide. So this
-        // insists for a moment and then stops, rather than fighting the user
-        // if they bring the window up straight away.
-        let deadline = *self
-            .start_hidden_until
-            .get_or_insert_with(|| Instant::now() + std::time::Duration::from_millis(1500));
-        if crate::window::to_tray() {
-            self.hidden = true;
-            self.clip_hidden.store(true, Ordering::Relaxed);
-        }
-        if Instant::now() >= deadline {
-            self.start_hidden = false;
-        }
-        ctx.request_repaint();
     }
 
     /// Keep the tray tooltip telling the truth: a waiting link outranks
@@ -1841,7 +1824,6 @@ impl eframe::App for SnagApp {
         self.pump_probe(ctx);
         self.pump_filmstrip(ctx);
         self.track_window(ctx);
-        self.apply_start_hidden(ctx);
         self.handle_tray(ctx);
         self.drain_clipboard(ctx);
         self.handle_shortcuts(ctx);

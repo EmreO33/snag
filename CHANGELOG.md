@@ -8,6 +8,18 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.3
+
+- **Starting in the tray now starts in the tray.** Snag opened its window and
+  then dropped it to the tray on the first frame, which is a flash of a
+  window nobody asked for. The window is now created out of sight and parked
+  before it can be drawn: measured at 80ms to the tray, against 225ms and a
+  30ms flash before. It cannot simply be created hidden, as a hidden window
+  gets no redraws and Snag runs from redraws, so it would sit there starting
+  no downloads and answering no tray clicks.
+- If the tray icon cannot be made at all, a Snag that was told to start there
+  shows its window rather than becoming a process with no way to reach it.
+
 ## 1.5.2
 
 - **The tray menu works.** "Show Snag" and "download what I copied" did

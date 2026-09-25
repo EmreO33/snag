@@ -144,13 +144,6 @@ fn startup_preset() -> Option<String> {
     std::env::args().find_map(|a| a.strip_prefix("--preset=").map(str::to_string))
 }
 
-/// `snag --tray` goes straight to the tray without showing a window, which
-/// is what the autostart shortcut passes. Ignored when there is no tray to
-/// go to, since that would leave no way to get the window back.
-fn startup_tray() -> bool {
-    std::env::args().any(|a| a == autostart::TRAY_ARG)
-}
-
 /// `snag --view=<name>` opens straight to a screen instead of the link box.
 fn startup_view() -> Option<app::View> {
     std::env::args()
@@ -167,6 +160,19 @@ fn startup_view() -> Option<app::View> {
         })
 }
 
+/// Is this launch one that belongs in the tray rather than on screen?
+///
+/// `snag --tray` says so outright, which is what the autostart shortcut
+/// passes, and so does the setting.
+///
+/// Asked before the window is built, because a window that is going to the
+/// tray should never be drawn at all. The settings are read again by the app
+/// itself a moment later; reading them twice costs a few milliseconds and
+/// saves a window appearing and vanishing.
+fn starting_in_tray() -> bool {
+    app::launched_into_tray(&settings::Settings::load().0)
+}
+
 fn main() -> eframe::Result<()> {
     if print_command_and_exit() || install_ytdlp_and_exit() || notify_test_and_exit() {
         return Ok(());
@@ -176,13 +182,21 @@ fn main() -> eframe::Result<()> {
     // deleted once it is no longer the running process.
     selfupdate::clean_stale_binary();
 
+    // Going to the tray: the window is created invisible and put straight
+    // into the tray by the watcher below, so it is never seen on screen.
+    let to_tray = starting_in_tray();
+    if to_tray {
+        window::park_in_tray();
+    }
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Snag")
             .with_inner_size([980.0, 660.0])
             .with_min_inner_size([720.0, 480.0])
             .with_app_id("snag")
-            .with_icon(icon::icon_data().unwrap_or_default()),
+            .with_icon(icon::icon_data().unwrap_or_default())
+            .with_visible(!to_tray),
         vsync: true,
         centered: true,
         ..Default::default()
@@ -207,9 +221,6 @@ fn main() -> eframe::Result<()> {
             }
             if let Some(v) = startup_view() {
                 app.view = v;
-            }
-            if startup_tray() {
-                app.start_hidden = true;
             }
             Ok(Box::new(app))
         }),

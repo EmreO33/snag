@@ -26,6 +26,22 @@ pub fn restore() -> bool {
     false
 }
 
+/// Put the window into the tray before anyone sees it, from a thread of its
+/// own, started before the window exists.
+///
+/// Starting in the tray used to mean letting the window appear and then
+/// minimising it on the first frame, which is a flash of a window nobody
+/// asked for. The window cannot simply be created hidden instead: a hidden
+/// window gets no redraws, eframe runs the app from redraws, and a Snag that
+/// never redraws never starts its downloads or answers its tray. So it is
+/// created invisible, and this watches for it to exist and shows it
+/// minimised, which is a state that both stays out of sight and keeps the
+/// app running.
+pub fn park_in_tray() {
+    #[cfg(windows)]
+    std::thread::spawn(imp::park_in_tray);
+}
+
 /// Put the window away: off the screen and out of the taskbar, so closing
 /// to the tray looks like closing rather than like minimising.
 ///
@@ -61,6 +77,7 @@ mod imp {
     const SW_RESTORE: i32 = 9;
     const SW_MINIMIZE: i32 = 6;
     const SW_SHOW: i32 = 5;
+    const SW_SHOWMINNOACTIVE: i32 = 7;
 
     #[link(name = "user32")]
     extern "system" {
@@ -124,12 +141,13 @@ mod imp {
             return 1;
         }
 
-        // The real window is on screen and has a title. Without both of these
-        // the search lands on one of the invisible helper windows that the
-        // tray icon and the graphics stack create in this same process.
-        if unsafe { IsWindowVisible(window) } == 0 {
-            return 1;
-        }
+        // The real window has a title. Without this the search lands on one
+        // of the helper windows that the tray icon and the graphics stack
+        // create in this same process.
+        //
+        // Being on screen is deliberately not required: a window waiting to
+        // be parked in the tray has not been shown yet, and that is exactly
+        // when it most needs finding.
         if unsafe { GetWindowTextLengthW(window) } == 0 {
             return 1;
         }
@@ -166,6 +184,29 @@ mod imp {
         }
         MAIN_WINDOW.store(0, Ordering::Relaxed);
         unsafe { EnumWindows(visit, 0) };
+    }
+
+    /// Wait for the window to exist, then show it minimised and take its
+    /// taskbar button away. Gives up after a while rather than spinning
+    /// forever if something went wrong with the window entirely.
+    pub fn park_in_tray() {
+        for _ in 0..600 {
+            remember();
+            let window = MAIN_WINDOW.load(Ordering::Relaxed);
+            if window != 0 {
+                unsafe {
+                    taskbar(window, false);
+                    // Minimised and not activated: it never takes focus from
+                    // whatever the user is doing, which matters most when
+                    // this is running at login.
+                    ShowWindow(window, SW_SHOWMINNOACTIVE);
+                    if IsIconic(window) != 0 {
+                        return;
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
     }
 
     pub fn to_tray() -> bool {
