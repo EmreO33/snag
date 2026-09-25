@@ -3,7 +3,7 @@ use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use eframe::egui;
 
@@ -261,6 +261,11 @@ pub struct SnagApp {
     /// Set before the first frame to go straight to the tray, from the
     /// setting or from `--tray`. Cleared once it has happened.
     pub start_hidden: bool,
+    /// When to quit for an update that is waiting for this process to go.
+    /// Nothing else sets it: this is a real quit, not a trip to the tray.
+    quit_at: Option<Instant>,
+    /// Set once the close is a real one, so closing to the tray is skipped.
+    quitting: bool,
     /// When to stop insisting on that, see `apply_start_hidden`.
     start_hidden_until: Option<Instant>,
     /// Whether the window is the one in front, as of the last frame.
@@ -378,6 +383,8 @@ impl SnagApp {
             view_changed_at: Instant::now(),
             hidden: false,
             start_hidden: settings.background.start_in_tray,
+            quit_at: None,
+            quitting: false,
             start_hidden_until: None,
             focused: true,
 
@@ -1006,7 +1013,11 @@ impl SnagApp {
                             self.toast("update installed, restart snag to use it", false)
                         }
                         SelfUpdateState::HandedOff => {
-                            self.toast("the installer is taking over", false)
+                            self.toast("updating, snag will close and come back", false);
+                            // The installer is waiting for this process to
+                            // go. A beat first, so the message is read rather
+                            // than glimpsed.
+                            self.quit_at = Some(Instant::now() + Duration::from_millis(1200));
                         }
                         SelfUpdateState::Error(e) => {
                             let short: String = e.chars().take(90).collect();
@@ -1504,13 +1515,13 @@ impl SnagApp {
         // for longer than a moment.
         // One request is not enough. The window does not exist for the
         // first frame or two, and for a few frames after that winit shows it
-        // again as it finishes setting it up, undoing an early minimise. So
-        // this insists for a moment and then stops, rather than fighting the
-        // user if they bring the window up straight away.
+        // again as it finishes setting it up, undoing an early hide. So this
+        // insists for a moment and then stops, rather than fighting the user
+        // if they bring the window up straight away.
         let deadline = *self
             .start_hidden_until
             .get_or_insert_with(|| Instant::now() + std::time::Duration::from_millis(1500));
-        if crate::window::minimise() {
+        if crate::window::to_tray() {
             self.hidden = true;
             self.clip_hidden.store(true, Ordering::Relaxed);
         }
@@ -1573,17 +1584,39 @@ impl SnagApp {
 
     /// Closing the window means "get out of the way", not "quit", when the
     /// user has asked for that and there is a tray icon to get back from.
+    /// Leave, so an update waiting on this process can get on with it.
+    fn handle_pending_quit(&mut self, ctx: &egui::Context) {
+        let Some(at) = self.quit_at else {
+            return;
+        };
+        if Instant::now() >= at {
+            self.quitting = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
+    }
+
     fn handle_close_request(&mut self, ctx: &egui::Context) {
         if !ctx.input(|i| i.viewport().close_requested()) {
             return;
         }
+        // An update is waiting for this window to go: the tray is not where
+        // it is going.
+        if self.quitting {
+            return;
+        }
         if self.tray.is_some() && self.settings.background.run_in_background {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            // Minimise rather than hide: a hidden viewport loses its geometry
-            // and comes back a few pixels square, which eframe gives no way to
-            // put right. Minimised keeps the window intact, and the tray is
-            // still how you get it back.
-            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+            // Out of sight and off the taskbar, which is what closing a
+            // window is supposed to do. Driven through the platform rather
+            // than eframe's own visibility command: that one loses the
+            // window's geometry and brings it back a few pixels square.
+            if !crate::window::to_tray() {
+                // No window handle to hide, so shrink it instead: better
+                // than a window that will not close at all.
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+            }
             self.hidden = true;
             self.clip_hidden.store(true, Ordering::Relaxed);
         }
@@ -1803,6 +1836,7 @@ impl eframe::App for SnagApp {
         self.handle_tray(ctx);
         self.drain_clipboard(ctx);
         self.handle_shortcuts(ctx);
+        self.handle_pending_quit(ctx);
         self.handle_close_request(ctx);
         if self.applied_background != self.settings.background {
             self.applied_background = self.settings.background.clone();

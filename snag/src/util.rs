@@ -72,12 +72,27 @@ pub fn looks_like_url(s: &str) -> bool {
 pub fn reveal(path: &Path) {
     #[cfg(windows)]
     {
+        // Explorer wants the quotes around the path only, not around the
+        // whole argument. Rust quotes any argument containing a space,
+        // which turns the select argument into one quoted lump, and
+        // Explorer answers that by opening Documents. Hence raw_arg, which
+        // passes the command line through exactly as written.
+        use std::os::windows::process::CommandExt;
+
+        // A path yt-dlp reported can come back with forward slashes, which
+        // Explorer will not take either.
+        let text = path.display().to_string().replace('/', "\\");
         if path.is_dir() {
-            let _ = command("explorer").arg(path).spawn();
-        } else {
+            let _ = command("explorer").raw_arg(format!("\"{text}\"")).spawn();
+        } else if path.is_file() {
             let _ = command("explorer")
-                .arg(format!("/select,{}", path.display()))
+                .raw_arg(format!("/select,\"{text}\""))
                 .spawn();
+        } else if let Some(parent) = path.parent().filter(|p| p.is_dir()) {
+            // Moved, renamed or deleted since: its folder is the next best
+            // thing, and better than Explorer's idea of a default.
+            let parent = parent.display().to_string().replace('/', "\\");
+            let _ = command("explorer").raw_arg(format!("\"{parent}\"")).spawn();
         }
     }
     #[cfg(target_os = "macos")]

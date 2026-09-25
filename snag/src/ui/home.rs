@@ -365,7 +365,7 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
         if probe.is_playlist() {
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("take").size(12.0).color(p.dim));
+                theme::row_label(ui, p, "take");
                 let mut choice = app.playlist_choice;
                 if theme::pill(ui, p, "just this one", choice == PlaylistChoice::One, true)
                     .clicked()
@@ -415,7 +415,7 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
             ui.add_space(10.0);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
-                ui.label(egui::RichText::new("quality").size(12.0).color(p.dim));
+                theme::row_label(ui, p, "quality");
                 let mut chosen = app.height_override;
                 if theme::pill(ui, p, "from settings", chosen.is_none(), true).clicked() {
                     chosen = None;
@@ -444,7 +444,7 @@ fn presets(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
     ui.add_space(8.0);
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
-        ui.label(egui::RichText::new("preset").size(12.0).color(p.dim));
+        theme::row_label(ui, p, "preset");
 
         let mut apply = None;
         for (i, preset) in presets.iter().enumerate() {

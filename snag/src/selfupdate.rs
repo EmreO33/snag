@@ -40,7 +40,7 @@ impl InstallKind {
     pub fn update_note(&self) -> &'static str {
         match self {
             InstallKind::Scoop => "this copy is managed by scoop, so it updates with 'scoop update snag' rather than replacing itself.",
-            InstallKind::Installed => "this copy was installed with the windows installer, so an update downloads the new installer and runs it.",
+            InstallKind::Installed => "this copy was installed with the windows installer. an update installs itself quietly and snag restarts: no wizard, nothing to click through.",
             InstallKind::AppImage => "this appimage replaces itself in place. the previous one is kept alongside until the next launch.",
             InstallKind::Portable => "this copy replaces its own binary in place. the previous one is kept alongside until the next launch.",
         }
@@ -113,7 +113,8 @@ pub enum SelfUpdateState {
     },
     /// The new binary is in place; Snag has to be restarted to run it.
     RestartRequired,
-    /// The installer was handed the update and Snag is getting out of its way.
+    /// The installer is waiting for Snag to close so it can replace it, and
+    /// will start Snag again afterwards.
     HandedOff,
     Error(String),
 }
@@ -417,14 +418,12 @@ pub fn install(
 
         let state = match kind {
             InstallKind::Installed => {
-                // Hand the update to the installer and step aside.
+                // Hand the update to the installer, quietly, and step aside.
                 let tmp = std::env::temp_dir().join(&asset);
                 match std::fs::write(&tmp, &bytes) {
-                    Ok(()) => match crate::util::command(&tmp).spawn() {
-                        Ok(_) => SelfUpdateState::HandedOff,
-                        Err(e) => {
-                            SelfUpdateState::Error(format!("could not start the installer: {e}"))
-                        }
+                    Ok(()) => match run_installer_quietly(&tmp) {
+                        Ok(()) => SelfUpdateState::HandedOff,
+                        Err(e) => SelfUpdateState::Error(e),
                     },
                     Err(e) => SelfUpdateState::Error(format!("could not save the installer: {e}")),
                 }
@@ -447,6 +446,176 @@ pub fn install(
         let _ = tx.send(SelfUpdateEvent::State(state));
         repaint();
     });
+}
+
+/// Run the downloaded installer without a wizard, then start Snag again.
+///
+/// The installer cannot replace a running Snag, and Snag cannot wait for the
+/// installer and then start itself, because by then it will have been
+/// replaced. So a small script does the waiting: it watches for this process
+/// to go, installs, and launches what it installed.
+///
+/// If the quiet install refuses (a per-machine install needs administrator,
+/// and this copy may not be running as one), the script falls back to showing
+/// the installer the old way rather than leaving the user with a closed Snag
+/// and no explanation.
+#[cfg(windows)]
+fn run_installer_quietly(installer: &Path) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| format!("could not find this snag: {e}"))?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| "this snag has no folder".to_string())?;
+    // The waiting is done by asking whether snag.exe can be written to yet,
+    // rather than by watching for a process id: Windows hands ids out again,
+    // and waiting on one that something else has taken waits forever.
+    // `timeout` needs a console and this script has none, so ping does the
+    // sleeping. The count is a ceiling, not a schedule: if snag somehow
+    // never lets go, the install is attempted anyway and says so.
+    let quiet = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-";
+    let script = format!(
+        r#"@echo off
+set /a tries=0
+:wait
+set /a tries+=1
+if %tries% gtr 120 goto install
+2>nul (>>"{exe}" (call )) || (ping -n 2 127.0.0.1 >nul & goto wait)
+
+:install
+"{installer}" {quiet} /DIR="{dir}"
+if not errorlevel 1 goto done
+
+rem Refused. That means permission, so ask for it once, quietly.
+powershell -NoProfile -WindowStyle Hidden -Command "$p = Start-Process -FilePath '{installer}' -ArgumentList '{quiet}','/DIR=\"{dir}\"' -Verb RunAs -Wait -PassThru; exit $p.ExitCode"
+if not errorlevel 1 goto done
+
+rem Still no. Show the installer rather than leave the user with a closed
+rem snag and no idea why.
+"{installer}"
+
+:done
+start "" "{exe}"
+rem Leaving no script behind. Written this way because a batch file that
+rem simply deletes itself makes cmd complain that it has gone missing.
+(goto) 2>nul & del "%~f0"
+"#,
+        quiet = quiet,
+        installer = installer.display(),
+        dir = dir.display(),
+        exe = exe.display(),
+    )
+    // Batch files are happier with the line endings the shell expects.
+    .replace('\n', "\r\n");
+
+    let script_path = std::env::temp_dir().join("snag-update.cmd");
+    std::fs::write(&script_path, script)
+        .map_err(|e| format!("could not write the update script: {e}"))?;
+
+    // A per-user install (the default) can be replaced by this process as
+    // it stands. A machine-wide one cannot, and asking the shell to elevate
+    // is the difference between one permission prompt and a whole wizard.
+    if !needs_admin(dir) {
+        crate::util::command("cmd")
+            .arg("/c")
+            .arg(&script_path)
+            .spawn()
+            .map_err(|e| format!("could not start the update: {e}"))?;
+    } else {
+        run_elevated("cmd", &format!("/c \"{}\"", script_path.display()))?;
+    }
+    Ok(())
+}
+
+/// The uninstall entry the Windows installer writes, whose location says
+/// whether this copy was installed for everyone or just for this user.
+const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{CF8CC397-F68D-4940-8897-10A39126914A}_is1";
+
+/// Does updating this copy need administrator?
+///
+/// Two things can say yes, and they are not the same thing. The obvious one
+/// is a folder this process cannot write to. The subtler one, and the one
+/// that actually bites, is a machine-wide install: the installer refuses to
+/// replace one of those without administrator even when the folder itself
+/// happens to be writable, and answers by returning an error rather than by
+/// asking for anything.
+#[cfg(windows)]
+fn needs_admin(dir: &Path) -> bool {
+    // Registered for all users, at this folder: an administrator's install.
+    if let Ok(out) = crate::util::run_capture(
+        "reg",
+        &[
+            "query",
+            &format!(r"HKLM\{UNINSTALL_KEY}"),
+            "/v",
+            "InstallLocation",
+        ],
+    ) {
+        let here = dir.to_string_lossy().to_lowercase().replace('/', "\\");
+        let listed = out.to_lowercase().replace('/', "\\");
+        let here = here.trim_end_matches('\\').to_string();
+        if listed.contains(&here) {
+            return true;
+        }
+    }
+
+    // Or simply somewhere this process may not write.
+    let probe = dir.join(format!("snag-write-test-{}", std::process::id()));
+    match std::fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&probe);
+            false
+        }
+        Err(_) => true,
+    }
+}
+
+/// Start something with a request to elevate, which is one prompt the user
+/// either accepts or does not.
+#[cfg(windows)]
+fn run_elevated(program: &str, args: &str) -> Result<(), String> {
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(
+            window: isize,
+            verb: *const u16,
+            file: *const u16,
+            params: *const u16,
+            dir: *const u16,
+            show: i32,
+        ) -> isize;
+    }
+
+    const SW_HIDE: i32 = 0;
+    // ShellExecuteW returns a fake HINSTANCE; anything over 32 is success,
+    // and the one failure worth naming is the user saying no.
+    const SE_ERR_CANCELLED: isize = 1223;
+
+    let result = unsafe {
+        ShellExecuteW(
+            0,
+            wide("runas").as_ptr(),
+            wide(program).as_ptr(),
+            wide(args).as_ptr(),
+            std::ptr::null(),
+            SW_HIDE,
+        )
+    };
+    match result {
+        r if r > 32 => Ok(()),
+        SE_ERR_CANCELLED => Err(
+            "the update needs permission to write to this folder, and that was declined"
+                .to_string(),
+        ),
+        r => Err(format!("could not start the update as administrator ({r})")),
+    }
+}
+
+#[cfg(not(windows))]
+fn run_installer_quietly(_installer: &Path) -> Result<(), String> {
+    Err("there is no windows installer to run here".to_string())
 }
 
 #[cfg(test)]

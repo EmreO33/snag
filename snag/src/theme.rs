@@ -188,6 +188,21 @@ fn announce_selected(
     response.widget_info(|| egui::WidgetInfo::selected(kind, enabled, selected, label.clone()));
 }
 
+/// How far a pill's text sits from its edge. Shared so that a label
+/// introducing a row of pills can leave the same gap and keep the rhythm.
+pub const PILL_PAD_X: f32 = 14.0;
+
+/// The dim word in front of a row of pills ("quality", "take", "preset").
+///
+/// Pills carry their own padding, so text to text they sit a pill's padding
+/// apart on each side. A bare label has none, which left the first pill
+/// visibly tighter to its label than the pills were to each other. This puts
+/// the missing padding back.
+pub fn row_label(ui: &mut Ui, p: &Palette, text: &str) {
+    ui.label(egui::RichText::new(text).size(12.0).color(p.dim));
+    ui.add_space(PILL_PAD_X - ui.spacing().item_spacing.x);
+}
+
 pub fn pill(ui: &mut Ui, p: &Palette, text: &str, selected: bool, enabled: bool) -> Response {
     let font = FontId::new(14.0, FontFamily::Monospace);
     // Laid out without a colour of its own, so the colour can be decided
@@ -195,7 +210,7 @@ pub fn pill(ui: &mut Ui, p: &Palette, text: &str, selected: bool, enabled: bool)
     let galley = ui
         .painter()
         .layout_no_wrap(text.to_string(), font, Color32::PLACEHOLDER);
-    let padding = Vec2::new(14.0, 8.0);
+    let padding = Vec2::new(PILL_PAD_X, 8.0);
     let size = galley.size() + padding * 2.0;
     let (rect, response) = ui.allocate_exact_size(
         Vec2::new(size.x, size.y.max(30.0)),

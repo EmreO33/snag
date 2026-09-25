@@ -8,6 +8,37 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.1
+
+Four things users reported, all fixed.
+
+- **Updating no longer runs the installer wizard.** An installed copy now
+  updates quietly: Snag closes, the new version installs itself, and Snag
+  comes back. A machine-wide install (one in Program Files) asks for
+  permission once, because Windows will not let it be replaced otherwise,
+  and if anything refuses, the installer is shown rather than leaving you
+  with a closed Snag. Note that the update *to* this version is still done
+  by the old code, so there is one more wizard before there are none.
+- **ffmpeg stays found after an update.** It was only ever looked for on
+  PATH, and PATH is inherited: a Snag started by the installer carried the
+  environment of the Snag that started it, which predates the winget
+  install that put ffmpeg there. Snag now looks in the places ffmpeg is
+  actually put, including winget's package folder and its own settings
+  folder, and remembers the path rather than trusting PATH to have it. yt-dlp
+  is told that path too, so merging works even when nothing else can find it.
+- **"show in folder" opens the folder again.** It opened Documents instead,
+  for any file whose path contained a space: the whole argument was being
+  quoted where only the path should have been, and Explorer answers a
+  command line it cannot parse by opening your Documents folder.
+- **Closing to the tray now closes the window** instead of minimising it to
+  the taskbar. The window and its taskbar button both go; the app keeps
+  running and the tray icon brings it back where it was. (It is minimised
+  rather than hidden behind the scenes, because a hidden window gets no
+  redraws and a Snag that cannot redraw stops pumping its queue.)
+- The label in front of a row of buttons ("quality", "take", "preset") now
+  sits the same distance from the first button as the buttons sit from each
+  other.
+
 ## 1.5.0
 
 - **Presets.** A name for the mode, quality and extras you use often:

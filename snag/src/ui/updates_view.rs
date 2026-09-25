@@ -55,7 +55,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                 p.good,
                             ),
                             SelfUpdateState::HandedOff => (
-                                "the installer is running. snag will close.".to_string(),
+                                "updating. snag will close and come back.".to_string(),
                                 p.good,
                             ),
                             SelfUpdateState::Error(e) => (e.clone(), p.bad),

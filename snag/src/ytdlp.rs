@@ -379,10 +379,13 @@ pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) 
         push(&mut a, "-N");
         a.push(s.processing.concurrent_fragments.to_string());
     }
-    let ffmpeg = s.advanced.ffmpeg_path.trim();
-    if !ffmpeg.is_empty() {
+    // Told where it is unless there is nothing to tell: yt-dlp looks on
+    // PATH by itself, but PATH is exactly what cannot be relied on for a
+    // winget ffmpeg in an inherited environment.
+    let ffmpeg = s.ffmpeg_bin();
+    if ffmpeg != "ffmpeg" {
         push(&mut a, "--ffmpeg-location");
-        a.push(ffmpeg.to_string());
+        a.push(ffmpeg);
     }
     if s.advanced.verbose_log {
         push(&mut a, "--verbose");

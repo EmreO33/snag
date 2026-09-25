@@ -561,40 +561,136 @@ fn ffmpeg_version_number(banner: &str) -> String {
     }
 }
 
-pub fn detect_ffmpeg(configured: &str) -> Option<String> {
-    let configured = configured.trim();
+/// Where ffmpeg was last found, for everything that has to actually run it.
+///
+/// Detection used to answer only "yes, version 9.0.1" and leave running it
+/// to `ffmpeg` on PATH. That is not the same question: winget's ffmpeg puts
+/// its own folder on PATH, and PATH is inherited, so a Snag started by
+/// something that predates the install (an installer, say) has a version it
+/// can see and a binary it cannot run. Remembering the path fixes that, and
+/// costs nothing when ffmpeg is on PATH anyway.
+/// Outer None means "nobody has looked yet", which is a different answer
+/// from "looked and it is not there".
+static FOUND_FFMPEG: std::sync::RwLock<Option<Option<String>>> = std::sync::RwLock::new(None);
+
+pub fn found_ffmpeg() -> Option<String> {
+    if let Ok(known) = FOUND_FFMPEG.read() {
+        if let Some(answer) = known.as_ref() {
+            return answer.clone();
+        }
+    }
+    // Nobody has looked yet, so look now rather than answering "ffmpeg" and
+    // leaving a download to fail at the merge. This happens on a job's own
+    // thread: the UI has its own probe running by then, and whichever
+    // finishes first saves the other the work.
+    detect_ffmpeg("");
+    FOUND_FFMPEG.read().ok().and_then(|k| k.clone().flatten())
+}
+
+/// Every place ffmpeg might be, best first.
+fn ffmpeg_candidates(configured: &str) -> Vec<String> {
     let mut candidates = Vec::new();
+    let configured = configured.trim();
     if !configured.is_empty() {
         candidates.push(configured.to_string());
     }
+    // On PATH, which is the normal case and the cheapest to try.
     candidates.push("ffmpeg".to_string());
+
+    let exe_name = if cfg!(windows) {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    };
+    // Beside snag's own settings, where a portable copy is told to put it.
+    candidates.push(
+        crate::bootstrap::config_dir()
+            .join(exe_name)
+            .display()
+            .to_string(),
+    );
+    candidates.push(
+        crate::bootstrap::managed_bin_dir()
+            .join(exe_name)
+            .display()
+            .to_string(),
+    );
+
     #[cfg(windows)]
     if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-        // A freshly winget-installed ffmpeg lands here, which our already
-        // running process may not have on PATH yet.
+        let winget = std::path::PathBuf::from(local)
+            .join("Microsoft")
+            .join("WinGet");
+        // Packages that publish a shim land here.
         candidates.push(
-            std::path::PathBuf::from(local)
-                .join("Microsoft")
-                .join("WinGet")
+            winget
                 .join("Links")
                 .join("ffmpeg.exe")
                 .display()
                 .to_string(),
         );
-    }
-
-    for bin in candidates {
-        if let Ok(out) = util::run_capture(&bin, &["-version"]) {
-            if let Some(first) = out.lines().next() {
-                return Some(ffmpeg_version_number(first));
+        // The ffmpeg winget offers does not: it unpacks a build and puts its
+        // own bin folder on PATH, so the binary has to be looked for.
+        // <Packages>/<Gyan.FFmpeg...>/<ffmpeg-9.0.1-full_build>/bin/ffmpeg.exe
+        if let Ok(packages) = std::fs::read_dir(winget.join("Packages")) {
+            for package in packages.flatten() {
+                let name = package.file_name().to_string_lossy().to_lowercase();
+                if !name.contains("ffmpeg") {
+                    continue;
+                }
+                let direct = package.path().join("bin").join("ffmpeg.exe");
+                if direct.is_file() {
+                    candidates.push(direct.display().to_string());
+                }
+                if let Ok(inner) = std::fs::read_dir(package.path()) {
+                    for build in inner.flatten() {
+                        let path = build.path().join("bin").join("ffmpeg.exe");
+                        if path.is_file() {
+                            candidates.push(path.display().to_string());
+                        }
+                    }
+                }
             }
         }
+    }
+
+    candidates
+}
+
+/// Find ffmpeg and ask its version. The path is remembered for `ffmpeg_bin`.
+pub fn detect_ffmpeg(configured: &str) -> Option<String> {
+    for bin in ffmpeg_candidates(configured) {
+        let Ok(out) = util::run_capture(&bin, &["-version"]) else {
+            continue;
+        };
+        let Some(first) = out.lines().next() else {
+            continue;
+        };
+        if let Ok(mut found) = FOUND_FFMPEG.write() {
+            *found = Some(Some(bin));
+        }
+        return Some(ffmpeg_version_number(first));
+    }
+    if let Ok(mut found) = FOUND_FFMPEG.write() {
+        *found = Some(None);
     }
     None
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn what_is_configured_is_tried_before_anything_else() {
+        let list = super::ffmpeg_candidates("  C:/tools/ffmpeg.exe  ");
+        assert_eq!(list[0], "C:/tools/ffmpeg.exe", "trimmed, and first");
+        assert_eq!(list[1], "ffmpeg", "then whatever is on PATH");
+        assert!(list.len() > 2, "and then the places it is usually put");
+
+        // Nothing configured means PATH leads.
+        let list = super::ffmpeg_candidates("   ");
+        assert_eq!(list[0], "ffmpeg");
+    }
+
     #[test]
     fn ffmpeg_banner_becomes_a_number() {
         use super::ffmpeg_version_number as v;

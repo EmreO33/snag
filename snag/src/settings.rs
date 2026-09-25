@@ -675,13 +675,14 @@ impl Settings {
         }
     }
 
+    /// What to run for ffmpeg: whatever was set by hand, else wherever it
+    /// was found, else the bare name and hope PATH has it.
     pub fn ffmpeg_bin(&self) -> String {
         let p = self.advanced.ffmpeg_path.trim();
-        if p.is_empty() {
-            "ffmpeg".into()
-        } else {
-            p.to_string()
+        if !p.is_empty() {
+            return p.to_string();
         }
+        crate::installer::found_ffmpeg().unwrap_or_else(|| "ffmpeg".into())
     }
 }
 
