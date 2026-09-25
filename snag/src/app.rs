@@ -463,7 +463,7 @@ impl SnagApp {
         self.dirty_since = Some(Instant::now());
     }
 
-    fn repainter(ctx: &egui::Context) -> impl Fn() + Send + 'static {
+    fn repainter(ctx: &egui::Context) -> impl Fn() + Send + Clone + 'static {
         let ctx = ctx.clone();
         move || ctx.request_repaint()
     }
@@ -1426,7 +1426,7 @@ impl SnagApp {
 
         let want_tray = self.settings.background.run_in_background && crate::tray::supported();
         if want_tray && self.tray.is_none() {
-            self.tray = crate::tray::create();
+            self.tray = crate::tray::create(Self::repainter(ctx));
             if self.tray.is_none() {
                 self.toast(
                     "could not add a tray icon, so snag will keep its window",
@@ -1482,7 +1482,14 @@ impl SnagApp {
         self.start_hidden = false;
         self.hidden = false;
         self.clip_hidden.store(false, Ordering::Relaxed);
-        crate::window::restore();
+        if !crate::window::restore() {
+            // The platform could not find the window to raise. eframe can
+            // still un-minimise its own viewport, which is better than
+            // leaving someone with a tray icon that appears to do nothing.
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        }
         ctx.request_repaint();
     }
 
@@ -1557,9 +1564,11 @@ impl SnagApp {
                     .filter(|u| crate::util::looks_like_url(u));
                 match url {
                     Some(url) => {
-                        let queued = self.queue_url(url);
-                        if !queued {
-                            self.notify_away("Already queued", "That link is in the queue.");
+                        let short: String = url.chars().take(70).collect();
+                        if self.queue_url(url) {
+                            self.notify_away("Downloading", &short);
+                        } else {
+                            self.notify_away("Already queued", &short);
                         }
                     }
                     None => {

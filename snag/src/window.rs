@@ -15,11 +15,15 @@ pub fn remember_main_window() {
     imp::remember();
 }
 
-/// Un-minimise the window and bring it forward. Does nothing if there is
-/// nothing to restore.
-pub fn restore() {
+/// Un-minimise the window and bring it forward. Returns whether there is
+/// now a window on screen, so a caller can fall back to asking eframe.
+pub fn restore() -> bool {
     #[cfg(windows)]
-    imp::restore();
+    {
+        imp::restore()
+    }
+    #[cfg(not(windows))]
+    false
 }
 
 /// Put the window away: off the screen and out of the taskbar, so closing
@@ -64,7 +68,8 @@ mod imp {
         fn GetWindowThreadProcessId(window: isize, process: *mut u32) -> u32;
         fn ShowWindow(window: isize, command: i32) -> i32;
         fn SetForegroundWindow(window: isize) -> i32;
-        fn GetWindowRect(window: isize, rect: *mut Rect) -> i32;
+        fn GetWindowPlacement(window: isize, placement: *mut WindowPlacement) -> i32;
+        fn IsWindow(window: isize) -> i32;
         fn GetWindow(window: isize, command: u32) -> isize;
         fn IsWindowVisible(window: isize) -> i32;
         fn GetWindowTextLengthW(window: isize) -> i32;
@@ -78,6 +83,26 @@ mod imp {
         top: i32,
         right: i32,
         bottom: i32,
+    }
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+
+    /// Where a window sits, including where it would sit if it were not
+    /// minimised, which is the part that matters here.
+    #[repr(C)]
+    #[derive(Default)]
+    struct WindowPlacement {
+        length: u32,
+        flags: u32,
+        show_command: u32,
+        min_position: Point,
+        max_position: Point,
+        normal_position: Rect,
     }
 
     #[link(name = "kernel32")]
@@ -110,11 +135,21 @@ mod imp {
         }
 
         // ...and only one big enough to be the real thing.
-        let mut rect = Rect::default();
-        if unsafe { GetWindowRect(window, &mut rect) } == 0 {
+        //
+        // The size has to come from the window's placement rather than from
+        // where it is right now: a minimised window reports itself as a
+        // 237x39 strip parked at -32000,-32000, so asking where it is would
+        // reject the very window we are looking for, and "show snag" would
+        // then quietly do nothing. Measured, after exactly that happened.
+        let mut placement = WindowPlacement {
+            length: std::mem::size_of::<WindowPlacement>() as u32,
+            ..Default::default()
+        };
+        if unsafe { GetWindowPlacement(window, &mut placement) } == 0 {
             return 1;
         }
-        if rect.right - rect.left < 200 || rect.bottom - rect.top < 200 {
+        let normal = &placement.normal_position;
+        if normal.right - normal.left < 200 || normal.bottom - normal.top < 200 {
             return 1;
         }
 
@@ -123,9 +158,14 @@ mod imp {
     }
 
     pub fn remember() {
-        if MAIN_WINDOW.load(Ordering::Relaxed) == 0 {
-            unsafe { EnumWindows(visit, 0) };
+        // A handle that no longer names a window is worse than none: it
+        // makes every attempt to show the window look like it worked.
+        let known = MAIN_WINDOW.load(Ordering::Relaxed);
+        if known != 0 && unsafe { IsWindow(known) } != 0 {
+            return;
         }
+        MAIN_WINDOW.store(0, Ordering::Relaxed);
+        unsafe { EnumWindows(visit, 0) };
     }
 
     pub fn to_tray() -> bool {
@@ -210,10 +250,13 @@ mod imp {
         }
     }
 
-    pub fn restore() {
+    pub fn restore() -> bool {
+        // Look again rather than give up: whoever is asking wants the window
+        // back, and the last search may have run at an awkward moment.
+        remember();
         let window = MAIN_WINDOW.load(Ordering::Relaxed);
         if window == 0 {
-            return;
+            return false;
         }
         unsafe {
             // The button comes back before the window does, so it is there
@@ -224,6 +267,7 @@ mod imp {
             // Windows often refuses this from a background thread, which is
             // fine: the window is back, it just may not be given focus.
             SetForegroundWindow(window);
+            IsWindowVisible(window) != 0 && IsIconic(window) == 0
         }
     }
 }

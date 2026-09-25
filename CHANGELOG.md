@@ -8,6 +8,26 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.2
+
+- **The tray menu works.** "Show Snag" and "download what I copied" did
+  nothing whenever Snag had been sitting still, which is most of the time
+  a tray icon exists for. A click on a tray menu sends nothing the window's
+  event loop is listening for, so the click sat in a queue that only gets
+  read when something else wakes the app: a download running, or a window
+  being dragged. The tray now wakes Snag itself. Reproduced on 1.5.1 and
+  checked again after fixing, both for the menu and for a click on the icon.
+- A single left click on the tray icon opens Snag too, rather than only a
+  double click.
+- "Download what I copied" now says what it did, since the window it would
+  normally say it in is not on screen: a notification for the link it
+  queued, for one already in the queue, and for a clipboard with no link
+  in it.
+- Snag could also lose track of its own window while that window was
+  minimised, which left "show snag" with nothing to show. It looks for the
+  window by the size it would be when restored now, not the 237x39 strip
+  Windows parks a minimised window in.
+
 ## 1.5.1
 
 Four things users reported, all fixed.
