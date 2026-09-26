@@ -96,6 +96,13 @@
   </keywords>
 
   <releases>
+    <release version="1.5.9" date="2026-09-26">
+      <description>
+        <p>Background mode on Linux: a tray icon, closing to the tray, starting
+          in the tray, and starting when you log in. Quit in the tray menu no
+          longer turns background mode off for good.</p>
+      </description>
+    </release>
     <release version="1.5.8" date="2026-09-26">
       <description>
         <p>A Windows fix: no duplicate Start menu entry for a machine-wide

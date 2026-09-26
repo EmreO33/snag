@@ -1532,7 +1532,9 @@ impl SnagApp {
         // is put back if the shell refuses.
         let want_autostart =
             self.settings.background.start_with_windows && crate::autostart::supported();
-        if want_autostart != crate::autostart::enabled() && !crate::autostart::set(want_autostart) {
+        if want_autostart != crate::autostart::enabled()
+            && !crate::autostart::set(want_autostart, Self::repainter(ctx))
+        {
             self.toast("could not change the startup entry", true);
             self.settings.background.start_with_windows = !want_autostart;
         }
@@ -1941,12 +1943,12 @@ impl eframe::App for SnagApp {
         self.handle_shortcuts(ctx);
         self.handle_pending_quit(ctx);
         self.handle_close_request(ctx);
-        if crate::autostart::take_refusal() {
+        if let Some((starts, why)) = crate::autostart::take_refusal() {
             // The Flatpak asked the desktop, which said no. Put the switch
             // back, in both copies so that is not taken as a new request.
-            self.settings.background.start_with_windows = false;
-            self.applied_background.start_with_windows = false;
-            self.toast("the desktop would not let snag start at login", true);
+            self.settings.background.start_with_windows = starts;
+            self.applied_background.start_with_windows = starts;
+            self.toast(why, true);
         }
         if self.applied_background != self.settings.background {
             self.applied_background = self.settings.background.clone();

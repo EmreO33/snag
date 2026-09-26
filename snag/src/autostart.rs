@@ -50,8 +50,10 @@ pub fn enabled() -> bool {
 ///
 /// Inside the Flatpak the desktop decides, and may ask the user first, so
 /// the question goes off on a thread and this returns true; a refusal turns
-/// up later, from `take_refusal`.
-pub fn set(on: bool) -> bool {
+/// up later, from `take_refusal`, and `wake` is called to have it noticed.
+pub fn set(on: bool, wake: impl Fn() + Send + 'static) -> bool {
+    #[cfg(not(target_os = "linux"))]
+    let _ = wake;
     #[cfg(windows)]
     {
         let Some(path) = imp::link_path() else {
@@ -72,7 +74,7 @@ pub fn set(on: bool) -> bool {
     }
     #[cfg(target_os = "linux")]
     {
-        imp::set(on)
+        imp::set(on, wake)
     }
     #[cfg(not(any(windows, target_os = "linux")))]
     {
@@ -81,16 +83,23 @@ pub fn set(on: bool) -> bool {
     }
 }
 
-/// Whether the Flatpak's request to change autostart was turned down since
-/// the last time this was asked. Always false elsewhere, where `set` knows
-/// the answer straight away.
-pub fn take_refusal() -> bool {
+/// If the Flatpak's last request to change autostart did not happen, and
+/// this has not been asked since: whether Snag still starts at login (the
+/// opposite of what was asked), and why. Always None elsewhere, where `set`
+/// knows the answer straight away.
+pub fn take_refusal() -> Option<(bool, &'static str)> {
     #[cfg(target_os = "linux")]
     {
-        imp::REFUSED.swap(false, std::sync::atomic::Ordering::Relaxed)
+        use std::sync::atomic::Ordering::Relaxed;
+        let why = match imp::OUTCOME.swap(imp::NOTHING, Relaxed) {
+            imp::REFUSED => "the desktop would not let snag start at login",
+            imp::UNAVAILABLE => "this desktop has no way for the flatpak to start at login",
+            _ => return None,
+        };
+        Some((!imp::ASKED_ON.load(Relaxed), why))
     }
     #[cfg(not(target_os = "linux"))]
-    false
+    None
 }
 
 #[cfg(windows)]
@@ -106,14 +115,23 @@ mod imp {
 mod imp {
     use std::env::var_os;
     use std::path::PathBuf;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
     /// Named after the app id, as the Background portal names the one it
     /// writes, and as snapcraft.yaml's `autostart` expects.
     const FILE: &str = "io.github.EmreO33.Snag.desktop";
 
-    /// Set when the portal says no, for the app to put its switch back.
-    pub static REFUSED: AtomicBool = AtomicBool::new(false);
+    /// How the last portal request went, when it did not, for the app to
+    /// put its switch back and say why.
+    pub static OUTCOME: AtomicU8 = AtomicU8::new(NOTHING);
+    pub const NOTHING: u8 = 0;
+    /// The desktop, or the user, said no.
+    pub const REFUSED: u8 = 1;
+    /// No Background portal to ask: a desktop whose portal backend (GTK's
+    /// alone, say) does not offer one.
+    pub const UNAVAILABLE: u8 = 2;
+    /// What the last request asked for.
+    pub static ASKED_ON: AtomicBool = AtomicBool::new(false);
 
     fn in_flatpak() -> bool {
         var_os("FLATPAK_ID").is_some() || std::path::Path::new("/.flatpak-info").exists()
@@ -193,16 +211,22 @@ mod imp {
         }
     }
 
-    pub fn set(on: bool) -> bool {
+    pub fn set(on: bool, wake: impl Fn() + Send + 'static) -> bool {
         if !in_flatpak() {
             return record(on);
         }
+        ASKED_ON.store(on, Ordering::Relaxed);
         std::thread::spawn(move || {
-            if portal::request(on).unwrap_or(false) {
-                record(on);
-            } else {
-                REFUSED.store(true, Ordering::Relaxed);
-            }
+            let outcome = match portal::request(on) {
+                Ok(true) => {
+                    record(on);
+                    return;
+                }
+                Ok(false) => REFUSED,
+                Err(_) => UNAVAILABLE,
+            };
+            OUTCOME.store(outcome, Ordering::Relaxed);
+            wake();
         });
         true
     }

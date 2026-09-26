@@ -8,6 +8,27 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.9
+
+- **Background mode on Linux.** Snag gets a tray icon on Linux too, with
+  the same menu as on Windows: close the window and Snag keeps going in the
+  tray, left click the icon to bring it back, right click for "Download
+  what I copied" and Quit. "Start in the tray" and "start when you log in"
+  work as well, the second through your desktop's startup apps (for the
+  Flatpak, the desktop is asked, and says whether it allows it).
+- It needs a desktop with a tray: KDE, Cinnamon, XFCE, Budgie and Ubuntu's
+  GNOME have one, and plain GNOME gets one from the AppIndicator extension.
+  Without one, Snag says so and keeps its window. Started at login before
+  the panel is up, it waits for the tray rather than giving up.
+- A window cannot hide on Wayland and keep running, so with background mode
+  on, Snag runs through XWayland, from the next time it starts.
+- Starting in the tray no longer shows the window for a moment first: it
+  starts minimised, out of the taskbar, until you open it.
+- **Quit in the tray menu no longer turns background mode off**, on Windows
+  as well. Quit switched the setting off to get past closing to the tray,
+  and that was saved on the way out, so the next launch had background mode
+  off.
+
 ## 1.5.8
 
 - A machine-wide install no longer gets a second "Snag" in the Start menu.
