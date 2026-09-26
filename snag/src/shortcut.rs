@@ -76,6 +76,12 @@ pub fn programs_dir() -> Option<PathBuf> {
     Some(PathBuf::from(appdata).join("Microsoft\\Windows\\Start Menu\\Programs"))
 }
 
+/// The all-users Start Menu, where a machine-wide install puts its shortcut.
+pub fn common_programs_dir() -> Option<PathBuf> {
+    let data = std::env::var_os("ProgramData")?;
+    Some(PathBuf::from(data).join("Microsoft\\Windows\\Start Menu\\Programs"))
+}
+
 /// The Startup folder: everything in it runs at login.
 pub fn startup_dir() -> Option<PathBuf> {
     programs_dir().map(|d| d.join("Startup"))

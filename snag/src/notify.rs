@@ -114,6 +114,27 @@ mod imp {
                 && shortcut::stamp_app_id(link, APP_ID)
         });
 
+        // A machine-wide install's shortcut is in the all-users Start Menu,
+        // already stamped by the installer, and not ours to write to without
+        // administrator. It is enough by itself, so a shortcut of Snag's own
+        // beside it would only be a second "Snag" in Start. Earlier versions
+        // made that second one, so it is taken away again here.
+        let installed = shortcut::common_programs_dir().is_some_and(|common| {
+            let mut links = Vec::new();
+            shortcut::shortcuts_under(&common, 2, &mut links);
+            links.iter().any(|link| {
+                shortcut::target_of(link).is_some_and(|t| shortcut::same_file(&t, &exe))
+            })
+        });
+        if installed {
+            if let Some(own) = own_shortcut() {
+                if shortcut::target_of(&own).is_some_and(|t| shortcut::same_file(&t, &exe)) {
+                    let _ = std::fs::remove_file(own);
+                }
+            }
+            return;
+        }
+
         // Nobody made one: a portable copy, or a bare exe someone put
         // somewhere. Snag makes its own, and keeps it pointed at itself.
         if !stamped {
