@@ -174,7 +174,7 @@ jobs:
           import re
           p = 'packaging/flatpak/io.github.EmreO33.Snag.yml'
           s = open(p).read()
-          s, n = re.subn(r"      - type: git\n        url: https://github.com/EmreO33/snag.git\n        tag: v[0-9.]+\n",
+          s, n = re.subn(r"      - type: git\n        url: https://github.com/EmreO33/snag.git\n        tag: v[0-9.]+\n(        commit: [0-9a-f]+\n)?",
                          "      - type: dir\n        path: ../..\n", s)
           assert n == 1, "the snag source in the manifest has changed shape"
           open(p, 'w').write(s)
