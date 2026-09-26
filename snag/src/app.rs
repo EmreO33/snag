@@ -757,6 +757,14 @@ impl SnagApp {
                 break;
             }
             if job.state == JobState::Queued {
+                // Refused up front rather than downloaded into a folder that
+                // will not be there once Snag closes.
+                if crate::util::flatpak_private_folder(&self.settings.processing.download_dir) {
+                    job.state = JobState::Failed(
+                        "the download folder is not shared with the flatpak sandbox, so the file would be lost. pick another one in settings > local processing, or register a downloads folder with your desktop (xdg-user-dirs-update).".into(),
+                    );
+                    continue;
+                }
                 job.state = JobState::Starting;
                 running += 1;
                 // The machinery (paths, proxy, how many at once) is read
@@ -1178,6 +1186,12 @@ impl SnagApp {
             let _ = tx.send(SetupEvent::Deno(deno));
             repaint();
         });
+    }
+
+    /// The download folder is sandbox scratch space in a Flatpak, so
+    /// anything saved there would vanish. See `util::flatpak_private_folder`.
+    pub fn downloads_would_vanish(&self) -> bool {
+        crate::util::flatpak_private_folder(&self.settings.processing.download_dir)
     }
 
     /// ffmpeg has been looked for and is not there. False while the probe is

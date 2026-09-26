@@ -100,6 +100,17 @@ fn page(app: &mut SnagApp, ui: &mut egui::Ui) {
 
                 // Said here, before the download, rather than left for the
                 // failure to explain afterwards.
+                if app.downloads_would_vanish() {
+                    ui.label(
+                        egui::RichText::new(
+                            "the download folder is not shared with the flatpak sandbox, so downloads there would be lost. pick another in settings > local processing.",
+                        )
+                        .size(12.0)
+                        .color(p.warn),
+                    );
+                    ui.add_space(6.0);
+                }
+
                 if app.ffmpeg_missing() {
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;

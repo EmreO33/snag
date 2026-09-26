@@ -107,8 +107,10 @@ modules:
       - install -Dm644 packaging/linux/io.github.EmreO33.Snag.desktop -t /app/share/applications/
       - install -Dm644 packaging/linux/io.github.EmreO33.Snag.metainfo.xml -t /app/share/metainfo/
       - install -Dm644 assets/icon.png /app/share/icons/hicolor/256x256/apps/io.github.EmreO33.Snag.png
+      - install -Dm644 LICENSE -t /app/share/licenses/io.github.EmreO33.Snag/
     sources:
       - type: git
         url: https://github.com/EmreO33/snag.git
         tag: v1.5.5
+        commit: 43c1016cf74ea3e55c97c0b1726092309814a8ac
       - cargo-sources.json

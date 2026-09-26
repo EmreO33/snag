@@ -189,6 +189,51 @@ pub fn default_download_dir() -> PathBuf {
         .unwrap_or_else(|| dirs.home_dir().join("Downloads"))
 }
 
+/// Inside a Flatpak, whether `dir` is only the sandbox's own scratch space
+/// rather than a folder shared with the real system.
+///
+/// A folder the sandbox was not given still looks writable from inside it,
+/// because it sits on a tmpfs Flatpak made up. yt-dlp writes there happily,
+/// Snag reports the download done, and the file is gone when Snag closes.
+/// That happens when no Downloads folder is registered with the desktop,
+/// which is what Flatpak's xdg-download permission shares.
+///
+/// Always false outside a Flatpak.
+pub fn flatpak_private_folder(dir: &Path) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if !Path::new("/.flatpak-info").exists() {
+            return false;
+        }
+        let Ok(table) = std::fs::read_to_string("/proc/self/mountinfo") else {
+            return false;
+        };
+        // The deepest mount the folder lives under decides where it really is.
+        let mut best: Option<(usize, String)> = None;
+        for line in table.lines() {
+            let fields: Vec<&str> = line.split(' ').collect();
+            let Some(point) = fields.get(4) else { continue };
+            let Some(dash) = fields.iter().position(|f| *f == "-") else {
+                continue;
+            };
+            let Some(fstype) = fields.get(dash + 1) else {
+                continue;
+            };
+            // mountinfo writes a space in a path as the four characters \040.
+            let point = point.replace("\\040", " ");
+            if dir.starts_with(&point) && best.as_ref().is_none_or(|(len, _)| point.len() >= *len) {
+                best = Some((point.len(), fstype.to_string()));
+            }
+        }
+        matches!(best, Some((_, fstype)) if fstype == "tmpfs")
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = dir;
+        false
+    }
+}
+
 pub fn clipboard_text() -> Option<String> {
     arboard::Clipboard::new()
         .ok()
