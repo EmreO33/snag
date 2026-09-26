@@ -46,6 +46,12 @@ pub fn portable_data_dir() -> Option<PathBuf> {
 
 /// The OS-appropriate config directory: `%APPDATA%\Snag` on Windows.
 pub fn platform_config_dir() -> PathBuf {
+    // A snap's $HOME is ~/snap/snag/<revision>, copied forward on every
+    // update and deleted a few updates later. Settings keep yt-dlp's full
+    // path, so they belong in the folder snapd keeps across revisions.
+    if let Some(common) = std::env::var_os("SNAP_USER_COMMON") {
+        return PathBuf::from(common).join("config");
+    }
     directories::ProjectDirs::from("", "", "Snag")
         .map(|d| d.config_dir().to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."))

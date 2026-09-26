@@ -188,9 +188,21 @@ pub fn probe_duration(ffmpeg_bin: &str, input: &Path) -> Option<f64> {
     .filter(|d| *d > 0.0)
 }
 
-/// Where the result lands: same folder, stem tagged so the source is never clobbered.
-pub fn output_path(input: &Path, op: RemuxOp, container: &str, audio_ext: &str) -> PathBuf {
-    let dir = input.parent().unwrap_or(Path::new("."));
+/// Where the result lands: same folder, stem tagged so the source is never
+/// clobbered. `fallback_dir` is used when the source's folder is not one Snag
+/// can write to: a file picked through the Flatpak portal arrives as a path
+/// into the document portal, which holds that one file and nothing else.
+pub fn output_path(
+    input: &Path,
+    op: RemuxOp,
+    container: &str,
+    audio_ext: &str,
+    fallback_dir: &Path,
+) -> PathBuf {
+    let dir = match input.parent() {
+        Some(parent) if !is_document_portal(parent) => parent,
+        _ => fallback_dir,
+    };
     let stem = input
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
@@ -253,6 +265,24 @@ fn subtitle_codec(output: &Path) -> Vec<String> {
         _ => return Vec::new(),
     };
     vec!["-c:s".into(), codec.into()]
+}
+
+/// Whether `dir` is inside the document portal's mount, which appears at
+/// `$XDG_RUNTIME_DIR/doc` (normally `/run/user/<uid>/doc`).
+fn is_document_portal(dir: &Path) -> bool {
+    let under = |root: &Path| dir.starts_with(root.join("doc"));
+    if std::env::var_os("XDG_RUNTIME_DIR").is_some_and(|r| under(Path::new(&r))) {
+        return true;
+    }
+    // /run/user/<uid>/doc/..., whatever the uid.
+    let mut parts = dir
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned());
+    parts.next().is_some_and(|p| p == "/")
+        && parts.next().is_some_and(|p| p == "run")
+        && parts.next().is_some_and(|p| p == "user")
+        && parts.next().is_some()
+        && parts.next().is_some_and(|p| p == "doc")
 }
 
 fn build_args(input: &Path, output: &Path, op: RemuxOp, o: &Options) -> Vec<String> {
@@ -528,6 +558,19 @@ pub fn spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_portal_file_is_remuxed_into_the_fallback_folder() {
+        let fallback = Path::new("/home/me/Downloads");
+        let portal = Path::new("/run/user/1000/doc/8a986a2f/clip.mkv");
+        let out = output_path(portal, RemuxOp::Container, "mp4", "m4a", fallback);
+        assert_eq!(out, fallback.join("clip (remux).mp4"));
+
+        let ordinary = Path::new("/home/me/Videos/clip.mkv");
+        let out = output_path(ordinary, RemuxOp::Container, "mp4", "m4a", fallback);
+        assert_eq!(out, Path::new("/home/me/Videos/clip (remux).mp4"));
+    }
 
     #[test]
     fn reads_the_ways_people_write_a_time() {

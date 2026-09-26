@@ -8,6 +8,27 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.6
+
+- **The snap's ffmpeg did not start**, so every snap download that needed
+  merging or converting failed, and setup said ffmpeg was missing. It
+  needed two libraries that Ubuntu reaches through links a snap does not
+  get. The snap points at them directly now. Found by installing 1.5.5
+  from the Snap Store and using it.
+- The snap keeps its settings in the folder snapd keeps across updates.
+  They were in the folder for one revision, which snapd deletes a few
+  updates later, taking the path to Snag's own yt-dlp with it.
+- **Remuxing a file picked from outside Downloads in the Flatpak** could
+  not write its result: the picker shares only the file that was picked,
+  not the folder it is in. The result goes to the download folder instead.
+- In the Flatpak, a download folder that is not shared with the sandbox
+  now says so on the save screen, and a download there fails at once with
+  the reason. It used to finish, report done, and vanish when Snag closed.
+  That happens when no Downloads folder is registered with the desktop.
+- A Flatpak copy of Snag now updates from the bundle on the releases page:
+  it downloads the next one and gives you the command that installs it.
+- The snap is in the Snap Store: `sudo snap install snag`.
+
 ## 1.5.5
 
 - **Linux packages.** Alongside the AppImage there is now a .deb for

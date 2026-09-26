@@ -1388,8 +1388,13 @@ impl SnagApp {
             }
         }
 
-        let output =
-            crate::remux::output_path(&input, self.remux.op, &self.remux.container, &audio_ext);
+        let output = crate::remux::output_path(
+            &input,
+            self.remux.op,
+            &self.remux.container,
+            &audio_ext,
+            &self.settings.processing.download_dir,
+        );
 
         self.remux.log.clear();
         self.remux.progress = 0.0;

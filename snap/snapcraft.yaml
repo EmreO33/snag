@@ -41,6 +41,11 @@ apps:
     desktop: usr/share/applications/io.github.EmreO33.Snag.desktop
     common-id: io.github.EmreO33.Snag
     extensions: [gnome]
+    environment:
+      # ffmpeg links libblas and liblapack, which Ubuntu puts behind
+      # update-alternatives links a snap does not get. Without these it
+      # does not start, and Snag reports it missing.
+      LD_LIBRARY_PATH: $SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/blas:$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/lapack:$LD_LIBRARY_PATH
     plugs:
       - network
       # Downloads go to ~/Downloads, and remux works on files anywhere in

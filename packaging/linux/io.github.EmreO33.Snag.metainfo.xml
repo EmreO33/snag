@@ -96,6 +96,13 @@
   </keywords>
 
   <releases>
+    <release version="1.5.6" date="2026-09-26">
+      <description>
+        <p>Fixes for the snap and the Flatpak: the snap's ffmpeg starts, its
+          settings survive updates, and the Flatpak no longer loses a
+          download saved to a folder the sandbox cannot see.</p>
+      </description>
+    </release>
     <release version="1.5.5" date="2026-09-26">
       <description>
         <p>Linux packages: a .deb, an .rpm and a Flatpak alongside the

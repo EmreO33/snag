@@ -111,6 +111,5 @@ modules:
     sources:
       - type: git
         url: https://github.com/EmreO33/snag.git
-        tag: v1.5.5
-        commit: 43c1016cf74ea3e55c97c0b1726092309814a8ac
+        tag: v1.5.6
       - cargo-sources.json
