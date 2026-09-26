@@ -1,12 +1,12 @@
 {
-    "version": "1.5.7",
+    "version": "1.5.8",
     "description": "A small, fast, native desktop video downloader built on yt-dlp.",
     "homepage": "https://github.com/EmreO33/snag",
     "license": "GPL-3.0-or-later",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/EmreO33/snag/releases/download/v1.5.7/Snag-1.5.7-windows-portable.zip",
-            "hash": "4aa2cf4c7f4eb25d3855732ca185c48e89ae7b7d1a5bd6b2bb49b060de10e209"
+            "url": "https://github.com/EmreO33/snag/releases/download/v1.5.8/Snag-1.5.8-windows-portable.zip",
+            "hash": "f5ed0c59bf8187cce88df7f3a9fec82d8e74da45e1db26a2e290e1d260e96061"
         }
     },
     "bin": "snag.exe",
