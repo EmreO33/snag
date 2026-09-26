@@ -712,6 +712,22 @@ fn background(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
             &mut app.settings.background.run_in_background,
         );
 
+        if cfg!(target_os = "linux") && !app.settings.background.run_in_background {
+            theme::note_text(
+                ui,
+                &p,
+                "needs a desktop with a tray: kde, cinnamon, xfce and ubuntu have one, and plain gnome gets one from the appindicator extension.",
+            );
+        }
+
+        if app.settings.background.run_in_background && !crate::window::can_hide() {
+            theme::note_text(
+                ui,
+                &p,
+                "takes effect the next time snag starts. until then closing the window quits snag: on wayland a window cannot hide, so snag runs through xwayland when this is on.",
+            );
+        }
+
         if app.settings.background.run_in_background {
             changed |= theme::toggle_row(
                 ui,
@@ -722,11 +738,22 @@ fn background(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
             );
 
             if crate::autostart::supported() {
+                let (label, description) = if cfg!(windows) {
+                    (
+                        "start with windows",
+                        "puts a shortcut in your startup folder, so snag is already in the tray when you copy your first link. delete it there or turn this off to stop.",
+                    )
+                } else {
+                    (
+                        "start when you log in",
+                        "adds snag to your desktop's startup apps, so snag is already in the tray when you copy your first link. remove it there or turn this off to stop.",
+                    )
+                };
                 changed |= theme::toggle_row(
                     ui,
                     &p,
-                    "start with windows",
-                    "puts a shortcut in your startup folder, so snag is already in the tray when you copy your first link. delete it there or turn this off to stop.",
+                    label,
+                    description,
                     &mut app.settings.background.start_with_windows,
                 );
             }
@@ -748,7 +775,7 @@ fn background(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         theme::note_text(
             ui,
             &p,
-            "the linux version has no tray icon yet, so closing the window quits snag. anything still in the queue is remembered and carries on the next time snag opens.",
+            "this version has no tray icon, so closing the window quits snag. anything still in the queue is remembered and carries on the next time snag opens.",
         );
     }
 

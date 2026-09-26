@@ -30,11 +30,27 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "webp"
 # Desktop notifications, used to offer a copied link without stealing focus.
 notify-rust = "4"
 
-# A tray icon on Windows and macOS only: the Linux build would need
-# libayatana-appindicator present at build time, which would put a new system
-# dependency on the AppImage for a feature that is optional anyway.
+# The tray icon on Windows and macOS. Not on Linux, where tray-icon would need
+# libayatana-appindicator at build time and on every user's machine.
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 tray-icon = "0.19"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# The tray icon on Linux: a StatusNotifierItem, spoken over D-Bus, which is
+# how KDE, Cinnamon, XFCE, Budgie and GNOME with the AppIndicator extension
+# (Ubuntu's default) show tray icons. Pure Rust on the zbus notifications
+# already bring, so no system library to install or to build against.
+ksni = { version = "0.3", default-features = false, features = ["blocking", "async-io"] }
+# The same zbus, for asking the Flatpak portal to start Snag at login.
+zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }
+# To pick X11 over Wayland when Snag should be able to hide in the tray:
+# Wayland has no way to hide a window that keeps it running.
+winit = { version = "0.30", default-features = false, features = ["x11"] }
+# Starting in the tray without the window flashing up first: two properties
+# the window manager reads before it shows a window. Both already in the tree
+# through winit.
+x11rb = { version = "0.13", default-features = false }
+raw-window-handle = "0.6"
 
 # File dialogs. Win32 and Cocoa come for free; on Linux the backend is one of
 # the two features below, and rfd only pulls either in on Linux, so enabling

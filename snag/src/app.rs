@@ -26,6 +26,17 @@ pub fn launched_into_tray(settings: &Settings) -> bool {
     settings.background.start_in_tray || std::env::args().any(|a| a == crate::autostart::TRAY_ARG)
 }
 
+/// How long a Snag started in the tray waits for the desktop's tray to
+/// appear before showing its window instead. A panel still starting at
+/// login takes seconds; one that has not come in this long is not coming.
+const TRAY_WAIT: Duration = Duration::from_secs(20);
+
+const NO_TRAY: &str = if cfg!(target_os = "linux") {
+    "this desktop has no tray for snag's icon, so snag will keep its window"
+} else {
+    "could not add a tray icon, so snag will keep its window"
+};
+
 /// How much of a playlist link to take.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlaylistChoice {
@@ -276,6 +287,9 @@ pub struct SnagApp {
     quit_at: Option<Instant>,
     /// Set once the close is a real one, so closing to the tray is skipped.
     quitting: bool,
+    /// Until when to keep trying for a tray that is not there yet, having
+    /// started in it (see `wait_for_tray`).
+    tray_wait: Option<Instant>,
     /// Whether the window is the one in front, as of the last frame.
     pub focused: bool,
     /// The last sane window size seen while visible. Hiding a viewport loses
@@ -340,7 +354,7 @@ impl SnagApp {
         // there, before it could be seen, by the watcher main starts for
         // exactly that (see `window::park_in_tray`). All that is left here is
         // to agree with it.
-        let in_tray = launched_into_tray(&settings);
+        let in_tray = launched_into_tray(&settings) && crate::window::can_hide();
         let palette = theme::palette(settings.appearance.theme, settings.appearance.accent);
         theme::apply(&cc.egui_ctx, &palette, settings.appearance.ui_scale);
 
@@ -401,6 +415,7 @@ impl SnagApp {
             hidden: in_tray,
             quit_at: None,
             quitting: false,
+            tray_wait: None,
             focused: true,
 
             tray: None,
@@ -451,15 +466,32 @@ impl SnagApp {
         // appearance changes, and at launch it has not.
         crate::motion::set_enabled(app.settings.appearance.animations);
 
-        app.sync_background_features(&cc.egui_ctx);
+        // Started at login, Snag can be up before the desktop's panel is,
+        // and on Linux there is then no tray to join yet. Keep trying for a
+        // while, out of sight, rather than giving up on the first go.
+        if in_tray && cfg!(target_os = "linux") && app.settings.background.run_in_background {
+            app.tray_wait = Some(Instant::now() + TRAY_WAIT);
+        }
+
+        app.sync_background_features(&cc.egui_ctx, true);
 
         // The window was created out of sight on the promise of a tray icon
         // to bring it back. If that icon could not be made, showing the
         // window is the only thing that stops this being a process nobody
         // can reach.
         if in_tray {
-            if app.tray.is_some() {
+            if app.tray.is_some() || app.tray_wait.is_some() {
                 app.clip_hidden.store(true, Ordering::Relaxed);
+                // eframe shows the window once its first frame is drawn,
+                // whatever it was built as. On Windows park_in_tray has it
+                // covered. On Linux the window manager is told to put it
+                // away as it arrives, and failing that it is taken straight
+                // back down, in the same frame.
+                #[cfg(target_os = "linux")]
+                if !crate::window::start_out_of_sight(cc) {
+                    cc.egui_ctx
+                        .send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                }
             } else {
                 app.hidden = false;
                 cc.egui_ctx
@@ -1457,7 +1489,10 @@ impl SnagApp {
 
     /// Start or stop the tray icon and the clipboard watcher to match settings.
     /// Called whenever those settings might have changed, and once at startup.
-    fn sync_background_features(&mut self, ctx: &egui::Context) {
+    ///
+    /// `at_launch` is whether this is the first time, with the settings as
+    /// saved rather than as just changed.
+    fn sync_background_features(&mut self, ctx: &egui::Context, at_launch: bool) {
         // Windows shows nothing for an app that has not introduced itself,
         // and the introduction is repeated at each launch because it is
         // cheap and because a cleaned registry should not mean silence.
@@ -1476,12 +1511,16 @@ impl SnagApp {
         let want_tray = self.settings.background.run_in_background && crate::tray::supported();
         if want_tray && self.tray.is_none() {
             self.tray = crate::tray::create(Self::repainter(ctx));
-            if self.tray.is_none() {
-                self.toast(
-                    "could not add a tray icon, so snag will keep its window",
-                    true,
-                );
-                self.settings.background.run_in_background = false;
+            if self.tray.is_some() {
+                self.tray_wait = None;
+            } else if self.tray_wait.is_none() {
+                self.toast(NO_TRAY, true);
+                // Just turned on, the switch goes back to say it did not
+                // work. At launch it stays as it was saved: the tray may
+                // well be there next time.
+                if !at_launch {
+                    self.settings.background.run_in_background = false;
+                }
             }
         } else if !want_tray && self.tray.is_some() {
             // Dropping it takes the icon out of the tray.
@@ -1525,10 +1564,32 @@ impl SnagApp {
         }
     }
 
+    /// Started in the tray before there was one: try again each frame (a
+    /// hidden Snag runs one every half second) until it turns up, or show
+    /// the window once it is clear none is coming.
+    fn wait_for_tray(&mut self, ctx: &egui::Context) {
+        let Some(until) = self.tray_wait else {
+            return;
+        };
+        if !self.settings.background.run_in_background || self.tray.is_some() {
+            self.tray_wait = None;
+            return;
+        }
+        self.tray = crate::tray::create(Self::repainter(ctx));
+        if self.tray.is_some() {
+            self.tray_wait = None;
+        } else if Instant::now() >= until {
+            self.tray_wait = None;
+            self.show_window(ctx);
+            self.toast(NO_TRAY, true);
+        }
+    }
+
     /// Bring the window back from the tray, at the size it had before.
     fn show_window(&mut self, ctx: &egui::Context) {
         self.hidden = false;
         self.clip_hidden.store(false, Ordering::Relaxed);
+        crate::window::back_in_view();
         if !crate::window::restore() {
             // The platform could not find the window to raise. eframe can
             // still un-minimise its own viewport, which is better than
@@ -1596,8 +1657,10 @@ impl SnagApp {
                 }
             }
             TrayCommand::Quit => {
-                // A real quit, not another trip to the tray.
-                self.settings.background.run_in_background = false;
+                // A real quit, not another trip to the tray. Said with the
+                // flag rather than by turning background mode off, which
+                // used to be saved on the way out and left it off for good.
+                self.quitting = true;
                 self.tray = None;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
@@ -1628,16 +1691,28 @@ impl SnagApp {
         if self.quitting {
             return;
         }
-        if self.tray.is_some() && self.settings.background.run_in_background {
+        // A window that cannot be hidden (Wayland, until the restart that
+        // puts Snag on X11) closes for real rather than half-hiding.
+        if self.tray.is_some()
+            && self.settings.background.run_in_background
+            && crate::window::can_hide()
+        {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             // Out of sight and off the taskbar, which is what closing a
-            // window is supposed to do. Driven through the platform rather
-            // than eframe's own visibility command: that one loses the
-            // window's geometry and brings it back a few pixels square.
+            // window is supposed to do. Driven through the platform on
+            // Windows rather than eframe's own visibility command: there,
+            // that one loses the window's geometry and brings it back a few
+            // pixels square.
             if !crate::window::to_tray() {
-                // No window handle to hide, so shrink it instead: better
-                // than a window that will not close at all.
-                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                if cfg!(target_os = "linux") {
+                    // On X11 a hidden window keeps getting frames, so the
+                    // plain command is the right one here.
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                } else {
+                    // No window handle to hide, so shrink it instead:
+                    // better than a window that will not close at all.
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                }
             }
             self.hidden = true;
             self.clip_hidden.store(true, Ordering::Relaxed);
@@ -1866,10 +1941,18 @@ impl eframe::App for SnagApp {
         self.handle_shortcuts(ctx);
         self.handle_pending_quit(ctx);
         self.handle_close_request(ctx);
+        if crate::autostart::take_refusal() {
+            // The Flatpak asked the desktop, which said no. Put the switch
+            // back, in both copies so that is not taken as a new request.
+            self.settings.background.start_with_windows = false;
+            self.applied_background.start_with_windows = false;
+            self.toast("the desktop would not let snag start at login", true);
+        }
         if self.applied_background != self.settings.background {
             self.applied_background = self.settings.background.clone();
-            self.sync_background_features(ctx);
+            self.sync_background_features(ctx, false);
         }
+        self.wait_for_tray(ctx);
         // Hidden, Snag still has to wake up often enough to notice a copied
         // link and to keep any downloads moving.
         if self.hidden {

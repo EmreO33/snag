@@ -206,8 +206,8 @@ fn startup_view() -> Option<app::View> {
 /// tray should never be drawn at all. The settings are read again by the app
 /// itself a moment later; reading them twice costs a few milliseconds and
 /// saves a window appearing and vanishing.
-fn starting_in_tray() -> bool {
-    app::launched_into_tray(&settings::Settings::load().0)
+fn starting_in_tray(settings: &settings::Settings) -> bool {
+    app::launched_into_tray(settings) && window::can_hide()
 }
 
 fn main() -> eframe::Result<()> {
@@ -223,14 +223,32 @@ fn main() -> eframe::Result<()> {
     // deleted once it is no longer the running process.
     selfupdate::clean_stale_binary();
 
+    let settings = settings::Settings::load().0;
+
+    // On Linux, X11 when Snag may need to hide in the tray, since a Wayland
+    // window cannot be hidden. Decided first: it is what can_hide answers.
+    #[cfg(target_os = "linux")]
+    let event_loop_builder: Option<eframe::EventLoopBuilderHook> = window::prefer_x11(
+        settings.background.run_in_background || app::launched_into_tray(&settings),
+    )
+    .then(|| -> eframe::EventLoopBuilderHook {
+        Box::new(|builder| {
+            use winit::platform::x11::EventLoopBuilderExtX11;
+            builder.with_x11();
+        })
+    });
+    #[cfg(not(target_os = "linux"))]
+    let event_loop_builder = None;
+
     // Going to the tray: the window is created invisible and put straight
     // into the tray by the watcher below, so it is never seen on screen.
-    let to_tray = starting_in_tray();
+    let to_tray = starting_in_tray(&settings);
     if to_tray {
         window::park_in_tray();
     }
 
     let options = eframe::NativeOptions {
+        event_loop_builder,
         viewport: egui::ViewportBuilder::default()
             .with_title("Snag")
             .with_inner_size([980.0, 660.0])

@@ -2316,6 +2316,19 @@
     {
         "type": "archive",
         "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/ksni/ksni-0.3.6.crate",
+        "sha256": "814b44c24cd2cb236c3b8a41c7f08237b452a8e76ecaa81f1cec40b5b678215b",
+        "dest": "cargo/vendor/ksni-0.3.6"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"814b44c24cd2cb236c3b8a41c7f08237b452a8e76ecaa81f1cec40b5b678215b\", \"files\": {}}",
+        "dest": "cargo/vendor/ksni-0.3.6",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
         "url": "https://static.crates.io/crates/libappindicator/libappindicator-0.9.0.crate",
         "sha256": "03589b9607c868cc7ae54c0b2a22c8dc03dd41692d48f2d7df73615c6a95dc0a",
         "dest": "cargo/vendor/libappindicator-0.9.0"
@@ -3169,6 +3182,19 @@
         "type": "inline",
         "contents": "{\"package\": \"57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a\", \"files\": {}}",
         "dest": "cargo/vendor/paste-1.0.15",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/pastey/pastey-0.2.3.crate",
+        "sha256": "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4",
+        "dest": "cargo/vendor/pastey-0.2.3"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4\", \"files\": {}}",
+        "dest": "cargo/vendor/pastey-0.2.3",
         "dest-filename": ".cargo-checksum.json"
     },
     {
@@ -4222,6 +4248,19 @@
         "type": "inline",
         "contents": "{\"package\": \"61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1\", \"files\": {}}",
         "dest": "cargo/vendor/target-lexicon-0.12.16",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/task-local/task-local-0.1.1.crate",
+        "sha256": "2972044a9e5e448a506a7ff6f0d03b566d8ef4cd6918a58fc59835a0f8666626",
+        "dest": "cargo/vendor/task-local-0.1.1"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"2972044a9e5e448a506a7ff6f0d03b566d8ef4cd6918a58fc59835a0f8666626\", \"files\": {}}",
+        "dest": "cargo/vendor/task-local-0.1.1",
         "dest-filename": ".cargo-checksum.json"
     },
     {

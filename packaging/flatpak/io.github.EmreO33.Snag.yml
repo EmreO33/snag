@@ -37,6 +37,8 @@ finish-args:
   - --filesystem=xdg-download
   # "Download finished" when the window is not in front.
   - --talk-name=org.freedesktop.Notifications
+  # The tray icon, for running in the background.
+  - --talk-name=org.kde.StatusNotifierWatcher
   # "Show in folder", which opens the file manager with the file selected.
   - --talk-name=org.freedesktop.FileManager1
   # Signing in to YouTube reads Firefox's cookies, read-only, when asked to.

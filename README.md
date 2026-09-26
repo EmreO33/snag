@@ -124,7 +124,7 @@ Any copy of Snag is portable when a file named `portable.txt` sits next to it (t
 - **Clips.** Cut out part of a video on a filmstrip timeline, split by chapters, save subtitles.
 - **Remux.** Change the container, pull out the audio, mute, or make a GIF, from files you already have.
 - **Presets.** Save the setup you keep using and apply it in one click.
-- **Lives in the tray** (Windows). Close it and it keeps running; copy a link anywhere and it offers to download it, or just does. Can start with Windows.
+- **Lives in the tray.** Close it and it keeps running; copy a link anywhere and it offers to download it, or just does. Can start when you log in. On Linux it needs a desktop with a tray: KDE, Cinnamon, XFCE and Ubuntu have one, plain GNOME gets one from the AppIndicator extension.
 - **Notifications** when a download finishes or fails while Snag is out of sight.
 - **YouTube sign-in** for age-restricted and members-only videos, borrowed from your browser, never a password.
 - **Keeps itself working.** Sites change and yt-dlp follows; Snag keeps yt-dlp current and updates itself.
@@ -158,7 +158,7 @@ Worth knowing first: downloading from YouTube is against YouTube's terms whether
 | audio | best, mp3, m4a, ogg, opus, flac or wav; bitrate; loudness normalisation; dub language |
 | metadata | embed metadata, thumbnail, chapters, subtitles; subtitle files; SponsorBlock; keep upload dates |
 | local processing | download folder, file name template, overwrites, downloads at once, hardware encoding for clips |
-| background | tray, start with Windows, clipboard watching, notifications |
+| background | tray, start at login, clipboard watching, notifications |
 | network | proxy, speed limit, retries, timeouts, user agent |
 | youtube | browser session or cookies.txt, and check sign-in |
 | advanced | yt-dlp and ffmpeg paths, extra yt-dlp arguments, and a preview of the exact command Snag runs |

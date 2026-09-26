@@ -40,6 +40,9 @@ apps:
     command: bin/snag
     desktop: usr/share/applications/io.github.EmreO33.Snag.desktop
     common-id: io.github.EmreO33.Snag
+    # "start when you log in": Snag writes this file into the snap's own
+    # ~/.config/autostart, and snapd starts the app from it at login.
+    autostart: io.github.EmreO33.Snag.desktop
     extensions: [gnome]
     environment:
       # ffmpeg links libblas and liblapack, which Ubuntu puts behind
@@ -52,6 +55,9 @@ apps:
       # home or on a removable drive.
       - home
       - removable-media
+      # The tray icon, which is a StatusNotifierItem on the session bus:
+      # unity7 is the interface that lets a snap register one.
+      - unity7
 
 parts:
   snag:

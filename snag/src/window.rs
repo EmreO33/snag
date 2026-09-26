@@ -9,6 +9,188 @@
 //! It also means the clipboard watcher can raise the window from its own
 //! thread, without depending on the UI loop running while minimised.
 
+/// Whether closing the window can put Snag in the tray: out of sight, and
+/// still running.
+///
+/// Always on Windows and macOS. On Linux only on X11, which Snag asks for
+/// when background mode is on (see `prefer_x11`): a Wayland window cannot be
+/// hidden, only minimised, and a minimised Wayland window gets no frames, so
+/// a Snag hidden that way would stop downloading and stop answering its tray.
+pub fn can_hide() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::ON_X11.load(std::sync::atomic::Ordering::Relaxed)
+    }
+    #[cfg(not(target_os = "linux"))]
+    true
+}
+
+/// On Linux, decide between X11 and Wayland before the window exists.
+/// Returns whether to ask winit for X11 when it would otherwise pick Wayland.
+///
+/// X11 (XWayland, on a Wayland desktop) only when Snag should be able to
+/// hide in the tray, since that is the one thing Wayland cannot do; the rest
+/// of the time Snag gets whatever the desktop prefers.
+#[cfg(target_os = "linux")]
+pub fn prefer_x11(background: bool) -> bool {
+    let set = |name| std::env::var_os(name).is_some_and(|v| !v.is_empty());
+    let (wayland, x11) = (set("WAYLAND_DISPLAY"), set("DISPLAY"));
+    let force = background && wayland && x11;
+    linux::ON_X11.store(
+        x11 && (force || !wayland),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    force
+}
+
+/// On Linux, have the window start minimised and off the taskbar, for a
+/// launch that belongs in the tray. Returns whether it worked.
+///
+/// eframe shows its window once the first frame is drawn, whatever it was
+/// built as, so hiding it afterwards meant a window that flashed up and
+/// vanished. Told before that first appearance, the window manager puts it
+/// straight away instead: minimised, which on X11 still gets frames, and
+/// with no taskbar button or pager entry for it. `back_in_view` undoes
+/// both, the first time the window is asked for.
+#[cfg(target_os = "linux")]
+pub fn start_out_of_sight(window: &impl raw_window_handle::HasWindowHandle) -> bool {
+    use raw_window_handle::RawWindowHandle;
+    let id = match window.window_handle().map(|h| h.as_raw()) {
+        Ok(RawWindowHandle::Xlib(h)) => h.window as u32,
+        Ok(RawWindowHandle::Xcb(h)) => h.window.get(),
+        _ => return false,
+    };
+    let done = linux::start_out_of_sight(id).is_some();
+    if done {
+        linux::OUT_OF_SIGHT.store(id, std::sync::atomic::Ordering::Relaxed);
+    }
+    done
+}
+
+/// Undo `start_out_of_sight`, if it was done and not yet undone, so the
+/// window shows as any other: on the taskbar, and not minimised the next
+/// time it is mapped. Call before asking for the window to be shown.
+pub fn back_in_view() {
+    #[cfg(target_os = "linux")]
+    {
+        let id = linux::OUT_OF_SIGHT.swap(0, std::sync::atomic::Ordering::Relaxed);
+        if id != 0 {
+            let _ = linux::back_in_view(id);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod linux {
+    use std::sync::atomic::{AtomicBool, AtomicU32};
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{
+        AtomEnum, ClientMessageEvent, ConnectionExt as _, EventMask, PropMode, Window,
+    };
+    use x11rb::rust_connection::RustConnection;
+    use x11rb::wrapper::ConnectionExt as _;
+
+    /// Whether the window is on X11, where it can be hidden.
+    pub static ON_X11: AtomicBool = AtomicBool::new(false);
+
+    /// The window `start_out_of_sight` put away, until `back_in_view`.
+    pub static OUT_OF_SIGHT: AtomicU32 = AtomicU32::new(0);
+
+    /// WM_HINTS, as ICCCM lays it out: nine 32-bit fields, the flags first
+    /// and the initial state third.
+    const STATE_HINT: u32 = 1 << 1;
+    const NORMAL_STATE: u32 = 1;
+    const ICONIC_STATE: u32 = 3;
+
+    fn atom(conn: &RustConnection, name: &str) -> Option<u32> {
+        Some(
+            conn.intern_atom(false, name.as_bytes())
+                .ok()?
+                .reply()
+                .ok()?
+                .atom,
+        )
+    }
+
+    /// Set the state the window manager gives the window when it is mapped,
+    /// keeping whatever else winit put in the hints.
+    fn set_initial_state(conn: &RustConnection, window: Window, state: u32) -> Option<()> {
+        let current = conn
+            .get_property(false, window, AtomEnum::WM_HINTS, AtomEnum::WM_HINTS, 0, 9)
+            .ok()?
+            .reply()
+            .ok()?;
+        let mut hints = [0u32; 9];
+        for (slot, value) in hints
+            .iter_mut()
+            .zip(current.value32().into_iter().flatten())
+        {
+            *slot = value;
+        }
+        hints[0] |= STATE_HINT;
+        hints[2] = state;
+        conn.change_property32(
+            PropMode::REPLACE,
+            window,
+            AtomEnum::WM_HINTS,
+            AtomEnum::WM_HINTS,
+            &hints,
+        )
+        .ok()?;
+        Some(())
+    }
+
+    fn skip_atoms(conn: &RustConnection) -> Option<[u32; 2]> {
+        Some([
+            atom(conn, "_NET_WM_STATE_SKIP_TASKBAR")?,
+            atom(conn, "_NET_WM_STATE_SKIP_PAGER")?,
+        ])
+    }
+
+    /// Before the window is first mapped, so set as plain properties: that
+    /// is how a client states them for a window the manager has not seen.
+    pub fn start_out_of_sight(window: Window) -> Option<()> {
+        let (conn, _) = RustConnection::connect(None).ok()?;
+        set_initial_state(&conn, window, ICONIC_STATE)?;
+        let state = atom(&conn, "_NET_WM_STATE")?;
+        conn.change_property32(
+            PropMode::REPLACE,
+            window,
+            state,
+            AtomEnum::ATOM,
+            &skip_atoms(&conn)?,
+        )
+        .ok()?;
+        conn.sync().ok()
+    }
+
+    /// Once the window manager has the window, its state changes by asking
+    /// it, with a message to the root window.
+    pub fn back_in_view(window: Window) -> Option<()> {
+        let (conn, screen) = RustConnection::connect(None).ok()?;
+        set_initial_state(&conn, window, NORMAL_STATE)?;
+        let root = conn.setup().roots.get(screen)?.root;
+        let state = atom(&conn, "_NET_WM_STATE")?;
+        const REMOVE: u32 = 0;
+        const FROM_APPLICATION: u32 = 1;
+        let [taskbar, pager] = skip_atoms(&conn)?;
+        let message = ClientMessageEvent::new(
+            32,
+            window,
+            state,
+            [REMOVE, taskbar, pager, FROM_APPLICATION, 0],
+        );
+        conn.send_event(
+            false,
+            root,
+            EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+            message,
+        )
+        .ok()?;
+        conn.sync().ok()
+    }
+}
+
 /// Remember the main window so it can be restored later.
 pub fn remember_main_window() {
     #[cfg(windows)]

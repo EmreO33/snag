@@ -55,7 +55,7 @@ pub fn icon_data() -> Option<egui::IconData> {
 /// The launcher icon as raw RGBA, for the system tray. Unused where there is
 /// no tray to put it in.
 #[cfg_attr(
-    not(any(windows, target_os = "macos")),
+    not(any(windows, target_os = "macos", target_os = "linux")),
     allow(dead_code, reason = "no tray on this platform")
 )]
 pub fn tray_rgba() -> Option<(u32, u32, Vec<u8>)> {
