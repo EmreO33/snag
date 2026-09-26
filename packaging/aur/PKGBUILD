@@ -7,7 +7,7 @@
 # The release workflow fills in pkgver and the checksum and pushes this to
 # the AUR. By hand: bump pkgver, run updpkgsums, then
 # makepkg --printsrcinfo > .SRCINFO.
-pkgname=snag-bin
+pkgname=snag-downloader-bin
 pkgver=1.5.5
 pkgrel=1
 pkgdesc="Download video and audio from almost any site: a small, fast desktop front end for yt-dlp"

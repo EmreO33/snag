@@ -307,7 +307,7 @@ jobs:
       - uses: KSXGitHub/github-actions-deploy-aur@v4
         if: steps.pkgbuild.outputs.push == 'true'
         with:
-          pkgname: snag-bin
+          pkgname: snag-downloader-bin
           pkgbuild: packaging/aur/PKGBUILD
           commit_username: Emre Demir
           commit_email: 274893088+EmreO33@users.noreply.github.com
