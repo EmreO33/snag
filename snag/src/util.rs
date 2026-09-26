@@ -107,13 +107,57 @@ pub fn reveal(path: &Path) {
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        let target = if path.is_dir() {
-            path.to_path_buf()
-        } else {
-            path.parent().unwrap_or(path).to_path_buf()
-        };
-        let _ = command("xdg-open").arg(target).spawn();
+        // Ask the file manager to open the folder with the file selected,
+        // the way Explorer's /select does. Nautilus, Dolphin, Nemo, Caja and
+        // Thunar all answer this; when nothing does, open the folder instead.
+        // On a thread, because a file manager being started to answer can
+        // take a second, and the window should not wait on it.
+        let path = path.to_path_buf();
+        std::thread::spawn(move || {
+            if path.is_file() {
+                let shown = command("dbus-send")
+                    .args([
+                        "--session",
+                        "--print-reply",
+                        "--reply-timeout=3000",
+                        "--dest=org.freedesktop.FileManager1",
+                        "/org/freedesktop/FileManager1",
+                        "org.freedesktop.FileManager1.ShowItems",
+                    ])
+                    .arg(format!("array:string:{}", file_uri(&path)))
+                    .arg("string:")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .is_ok_and(|s| s.success());
+                if shown {
+                    return;
+                }
+            }
+            let target = if path.is_dir() {
+                path.clone()
+            } else {
+                path.parent().unwrap_or(&path).to_path_buf()
+            };
+            let _ = command("xdg-open").arg(target).spawn();
+        });
     }
+}
+
+/// A `file://` URI for `path`, with everything but the unreserved characters
+/// percent-encoded, as D-Bus file manager calls expect.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn file_uri(path: &Path) -> String {
+    use std::os::unix::ffi::OsStrExt;
+    let mut uri = String::from("file://");
+    for &b in path.as_os_str().as_bytes() {
+        if b.is_ascii_alphanumeric() || b"/-._~".contains(&b) {
+            uri.push(b as char);
+        } else {
+            uri.push_str(&format!("%{b:02X}"));
+        }
+    }
+    uri
 }
 
 pub fn open_path(path: &Path) {
@@ -126,9 +170,23 @@ pub fn open_path(path: &Path) {
 }
 
 pub fn default_download_dir() -> PathBuf {
-    directories::UserDirs::new()
-        .and_then(|d| d.download_dir().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| PathBuf::from("."))
+    // A snap runs with $HOME pointed at its own private folder, so "the
+    // home folder's Downloads" would be one nobody ever looks in. snapd
+    // says where the real home is.
+    if let Some(real_home) = std::env::var_os("SNAP_REAL_HOME") {
+        return PathBuf::from(real_home).join("Downloads");
+    }
+    let Some(dirs) = directories::UserDirs::new() else {
+        return PathBuf::from(".");
+    };
+    // Linux only has a downloads folder when xdg-user-dirs has been run and
+    // written one down, which a minimal install, a server image or a fresh
+    // WSL never does. "." was the fallback, which is wherever Snag happened
+    // to be started from: often / from a launcher. ~/Downloads is where
+    // everyone would look, and yt-dlp creates it if it is not there yet.
+    dirs.download_dir()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| dirs.home_dir().join("Downloads"))
 }
 
 pub fn clipboard_text() -> Option<String> {
@@ -162,4 +220,15 @@ pub fn version_is_newer(latest: &str, current: &str) -> bool {
         }
     }
     false
+}
+
+#[cfg(all(test, unix, not(target_os = "macos")))]
+mod tests {
+    #[test]
+    fn file_uris_encode_spaces_and_non_ascii() {
+        let uri = super::file_uri(std::path::Path::new("/home/a b/Me at the zoo (1).mkv"));
+        assert_eq!(uri, "file:///home/a%20b/Me%20at%20the%20zoo%20%281%29.mkv");
+        let uri = super::file_uri(std::path::Path::new("/tmp/çay.mp3"));
+        assert_eq!(uri, "file:///tmp/%C3%A7ay.mp3");
+    }
 }

@@ -220,6 +220,41 @@ pub fn output_path(input: &Path, op: RemuxOp, container: &str, audio_ext: &str) 
     candidate
 }
 
+/// The streams to leave behind when copying into `output`'s container.
+///
+/// Only mkv holds attached files and data streams. Everything else refuses
+/// the whole file over them, and every mkv Snag downloads has one: the
+/// thumbnail, embedded as an attachment. So mkv to mp4 always failed.
+fn container_fit(output: &Path) -> Vec<String> {
+    let is_mkv = output
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("mkv"));
+    if is_mkv {
+        Vec::new()
+    } else {
+        ["-map", "-0:t?", "-map", "-0:d?"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+}
+
+/// Subtitles converted into the one text format `output`'s container takes.
+/// A copy only works when the source was already in it, and mkv's usual ass
+/// and srt are not what mp4, mov or webm hold.
+fn subtitle_codec(output: &Path) -> Vec<String> {
+    let ext = output
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let codec = match ext.as_str() {
+        "mp4" | "mov" => "mov_text",
+        "webm" => "webvtt",
+        _ => return Vec::new(),
+    };
+    vec!["-c:s".into(), codec.into()]
+}
+
 fn build_args(input: &Path, output: &Path, op: RemuxOp, o: &Options) -> Vec<String> {
     let mut a: Vec<String> = vec![
         "-hide_banner".into(),
@@ -257,7 +292,10 @@ fn build_args(input: &Path, output: &Path, op: RemuxOp, o: &Options) -> Vec<Stri
 
     match op {
         RemuxOp::Container => {
-            a.extend(["-map".into(), "0".into(), "-c".into(), "copy".into()]);
+            a.extend(["-map".into(), "0".into()]);
+            a.extend(container_fit(output));
+            a.extend(["-c".into(), "copy".into()]);
+            a.extend(subtitle_codec(output));
         }
         RemuxOp::Clip => {
             a.extend(["-map".into(), "0".into()]);
@@ -464,10 +502,18 @@ pub fn spawn(
             let used_hardware = op == RemuxOp::Clip
                 && options.clip_exact
                 && options.encoder != VideoEncoder::Software;
+            let into_webm = output
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("webm"));
             RemuxState::Failed(if used_hardware {
                 format!(
                     "the {} encoder failed, which usually means this machine's gpu or driver does not support it. switch the video encoder back to software in settings > local processing.\n{last}",
                     options.encoder.label()
+                )
+            } else if into_webm && last.contains("Could not write header") {
+                // ffmpeg's own wording names no codec and no reason.
+                format!(
+                    "webm only holds vp8, vp9 or av1 video with opus or vorbis audio, and this file has something else. mp4 or mkv will take it.\n{last}"
                 )
             } else {
                 last

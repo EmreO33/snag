@@ -699,11 +699,19 @@ impl Settings {
     /// Path to the yt-dlp binary: the override if set, otherwise whatever is on PATH.
     pub fn ytdlp_bin(&self) -> String {
         let p = self.advanced.ytdlp_path.trim();
-        if p.is_empty() {
-            "yt-dlp".into()
-        } else {
-            p.to_string()
+        if !p.is_empty() {
+            return p.to_string();
         }
+        // No path was pinned, but Snag installed one of its own: use it.
+        // Setup only pins the path when the install and the "start using
+        // snag" click happen in the same run, so installing, closing Snag
+        // and coming back left a copy that setup showed as found and every
+        // download then failed to run, looking for yt-dlp on PATH instead.
+        let managed = crate::bootstrap::managed_bin_dir().join(crate::installer::local_name());
+        if managed.is_file() {
+            return managed.display().to_string();
+        }
+        "yt-dlp".into()
     }
 
     /// What to run for ffmpeg: whatever was set by hand, else wherever it

@@ -157,6 +157,14 @@ fn download_to(url: &str, dest: &Path, tx: &Sender<InstallEvent>) -> Result<(), 
 /// Download yt-dlp into `dir` in the background and report progress.
 pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send + 'static) {
     std::thread::spawn(move || {
+        install_now(&dir, &tx, &repaint);
+    });
+}
+
+/// Download yt-dlp into `dir`, check it runs, and put deno beside it, on the
+/// calling thread. The answer arrives as the final `InstallEvent::State`.
+pub fn install_now(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
+    {
         let dest = dir.join(local_name());
         let _ = tx.send(InstallEvent::Log(format!(
             "source:      {}",
@@ -172,7 +180,7 @@ pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send
         }));
         repaint();
 
-        if let Err(e) = download_to(&download_url(), &dest, &tx) {
+        if let Err(e) = download_to(&download_url(), &dest, tx) {
             let _ = tx.send(InstallEvent::State(InstallState::Failed(e)));
             repaint();
             return;
@@ -193,7 +201,7 @@ pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send
                 // having it is not yet fatal, so a failure here is logged
                 // and yt-dlp still counts as installed.
                 let _ = tx.send(InstallEvent::State(InstallState::Verifying));
-                match ensure_deno(&dir, &tx) {
+                match ensure_deno(dir, tx) {
                     Ok(v) => {
                         let _ = tx.send(InstallEvent::Log(format!("verified:    deno {v}")));
                     }
@@ -223,7 +231,7 @@ pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send
             }
         }
         repaint();
-    });
+    }
 }
 
 /// Look for a usable yt-dlp: the configured path first, then PATH, then any
@@ -396,7 +404,10 @@ fn package_manager_command() -> String {
     }
     for (tool, command) in [
         ("apt-get", "sudo apt install ffmpeg"),
-        ("dnf", "sudo dnf install ffmpeg"),
+        // Fedora's own archive carries it as ffmpeg-free; plain "ffmpeg"
+        // only exists once RPM Fusion has been added, so it fails on a
+        // stock install.
+        ("dnf", "sudo dnf install ffmpeg-free"),
         ("pacman", "sudo pacman -S ffmpeg"),
         ("zypper", "sudo zypper install ffmpeg"),
         ("apk", "sudo apk add ffmpeg"),

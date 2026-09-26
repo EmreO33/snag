@@ -2,3 +2,5 @@
 **/*.rs.bk
 *.pdb
 /dist/
+/target/
+.flatpak-builder/

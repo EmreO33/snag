@@ -1,0 +1,89 @@
+# The .deb and the .rpm, from one description. Built by the release workflow
+# with nfpm, from the repository root, after the Linux binary has been copied
+# to dist/linux/snag:
+#
+#   VERSION=1.5.5 nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
+#
+# The binary is built on Ubuntu 22.04 (glibc 2.35), so these install on
+# Ubuntu 22.04, Debian 12, Fedora 36, openSUSE Leap 15.5 and anything newer.
+name: snag
+arch: amd64
+platform: linux
+version: ${VERSION}
+section: video
+priority: optional
+maintainer: Emre Demir <274893088+EmreO33@users.noreply.github.com>
+description: |-
+  Download video and audio from almost any site.
+  Snag is a small, fast desktop front end for yt-dlp: paste a link, pick what
+  you want, and it downloads, from YouTube and a thousand other sites. It
+  keeps its own yt-dlp current, and uses the system's ffmpeg to merge and
+  convert.
+vendor: Emre Demir
+homepage: https://github.com/EmreO33/snag
+license: GPL-3.0-or-later
+
+contents:
+  - src: dist/linux/snag
+    dst: /usr/bin/snag
+    file_info:
+      mode: 0755
+  - src: packaging/linux/io.github.EmreO33.Snag.desktop
+    dst: /usr/share/applications/io.github.EmreO33.Snag.desktop
+  - src: packaging/linux/io.github.EmreO33.Snag.metainfo.xml
+    dst: /usr/share/metainfo/io.github.EmreO33.Snag.metainfo.xml
+  - src: assets/icon.png
+    dst: /usr/share/icons/hicolor/256x256/apps/io.github.EmreO33.Snag.png
+  - src: LICENSE
+    dst: /usr/share/doc/snag/copyright
+    packager: deb
+  - src: LICENSE
+    dst: /usr/share/licenses/snag/LICENSE
+    packager: rpm
+    type: license
+
+# What the binary links, and what winit and glutin open at runtime. Debian
+# wants package names; rpm takes library names, which is what lets one rpm
+# serve Fedora and openSUSE, whose package names differ.
+overrides:
+  deb:
+    depends:
+      - libc6 (>= 2.35)
+      - libgtk-3-0 | libgtk-3-0t64
+      - libegl1
+      - libgl1
+      - libxkbcommon0
+      - libxkbcommon-x11-0
+      - libwayland-client0
+      - libwayland-egl1
+      - libx11-6
+      - libx11-xcb1
+      - libxcursor1
+      - libxi6
+      - libxrender1
+    recommends:
+      - ffmpeg
+  rpm:
+    depends:
+      - libgtk-3.so.0()(64bit)
+      - libEGL.so.1()(64bit)
+      - libGL.so.1()(64bit)
+      - libxkbcommon.so.0()(64bit)
+      - libxkbcommon-x11.so.0()(64bit)
+      - libwayland-client.so.0()(64bit)
+      - libwayland-egl.so.1()(64bit)
+      - libX11.so.6()(64bit)
+      - libX11-xcb.so.1()(64bit)
+      - libXcursor.so.1()(64bit)
+      - libXi.so.6()(64bit)
+      - libXrender.so.1()(64bit)
+    recommends:
+      - /usr/bin/ffmpeg
+
+rpm:
+  group: Applications/Multimedia
+  summary: Download video and audio from almost any site
+  compression: zstd
+
+deb:
+  compression: zstd

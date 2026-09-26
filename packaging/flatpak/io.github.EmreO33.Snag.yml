@@ -1,0 +1,114 @@
+# The Flatpak, as Flathub builds it. The copy Flathub builds from lives in
+# the flathub/io.github.EmreO33.Snag repository; this one is its source, and
+# the release workflow's flatpak job builds it to prove it still does.
+#
+# Snag is built from source, offline, from the crates listed in
+# cargo-sources.json. Regenerate that whenever Cargo.lock changes:
+#
+#   python3 flatpak-cargo-generator.py snag/Cargo.lock -o packaging/flatpak/cargo-sources.json
+#
+# (from github.com/flatpak/flatpak-builder-tools, cargo/).
+#
+# ffmpeg, yt-dlp and deno come as the projects' own release builds, the way
+# other yt-dlp front ends on Flathub ship them. Snag still keeps yt-dlp
+# current by itself: when the bundled copy falls behind, "update now" puts a
+# fresh one in Snag's own folder, which it prefers from then on.
+app-id: io.github.EmreO33.Snag
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: snag
+
+finish-args:
+  - --share=network
+  # X11, through XWayland on a Wayland desktop, and deliberately not Wayland:
+  # Snag's clipboard (the paste button, watching for copied links, copy
+  # link) speaks X11, and a Flatpak given Wayland gets no X11 display at
+  # all, so every one of those silently did nothing. Outside the sandbox the
+  # same binary runs on Wayland with XWayland beside it, which is what this
+  # gives it here.
+  - --socket=x11
+  - --share=ipc
+  - --device=dri
+  # Where downloads go by default. Anywhere else is chosen through the
+  # portal's folder picker, which grants access to what was picked.
+  - --filesystem=xdg-download
+  # "Download finished" when the window is not in front.
+  - --talk-name=org.freedesktop.Notifications
+  # "Show in folder", which opens the file manager with the file selected.
+  - --talk-name=org.freedesktop.FileManager1
+  # Signing in to YouTube reads Firefox's cookies, read-only, when asked to.
+  - --filesystem=~/.mozilla/firefox:ro
+  - --filesystem=~/.config/mozilla/firefox:ro
+  - --filesystem=~/snap/firefox/common/.mozilla/firefox:ro
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - '*.a'
+
+modules:
+  # The shared build: ffmpeg and ffprobe share one set of libraries rather
+  # than carrying 165 MB each.
+  - name: ffmpeg
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 bin/ffmpeg bin/ffprobe -t /app/bin/
+      - mkdir -p /app/lib && cp -a lib/*.so* /app/lib/
+    sources:
+      - type: archive
+        url: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-25-15-37/ffmpeg-n9.0.2-8-gb135b25c19-linux64-gpl-shared-9.0.tar.xz
+        sha256: 2ff1b2fce7673d67334481e7b662e8e09322533e5ea59c45b11c530433cf5e0b
+        only-arches:
+          - x86_64
+
+  - name: yt-dlp
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 yt-dlp_linux /app/bin/yt-dlp
+    sources:
+      - type: file
+        url: https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_linux
+        sha256: 58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a
+        only-arches:
+          - x86_64
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest
+          version-query: .tag_name
+          url-query: '"https://github.com/yt-dlp/yt-dlp/releases/download/" + $version + "/yt-dlp_linux"'
+
+  - name: deno
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 deno /app/bin/deno
+    sources:
+      - type: archive
+        url: https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-unknown-linux-gnu.zip
+        sha256: c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490
+        only-arches:
+          - x86_64
+
+  - name: snag
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/snag/cargo
+        CARGO_NET_OFFLINE: 'true'
+    build-commands:
+      # The portal's file picker, not GTK's: inside the sandbox GTK's can
+      # only see the sandbox.
+      - cargo --offline build --release --locked --manifest-path snag/Cargo.toml
+        --no-default-features --features portal-file-dialogs
+      - install -Dm755 snag/target/release/snag /app/bin/snag
+      - install -Dm644 packaging/linux/io.github.EmreO33.Snag.desktop -t /app/share/applications/
+      - install -Dm644 packaging/linux/io.github.EmreO33.Snag.metainfo.xml -t /app/share/metainfo/
+      - install -Dm644 assets/icon.png /app/share/icons/hicolor/256x256/apps/io.github.EmreO33.Snag.png
+    sources:
+      - type: git
+        url: https://github.com/EmreO33/snag.git
+        tag: v1.5.5
+      - cargo-sources.json

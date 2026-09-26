@@ -115,7 +115,11 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                             if portable {
                                 "this is a portable copy, so everything stays in a data folder beside the executable and nothing is written anywhere else. a yt-dlp that snag installs lands there too, under bin."
                             } else {
-                                "the default is your appdata folder, which is the right answer unless you want snag portable. a yt-dlp that snag installs also lives here, under bin."
+                                if cfg!(windows) {
+                                    "the default is your appdata folder, which is the right answer unless you want snag portable. a yt-dlp that snag installs also lives here, under bin."
+                                } else {
+                                    "the default is your config folder, which is the right answer unless you want snag portable. a yt-dlp that snag installs also lives here, under bin."
+                                }
                             },
                         );
 
@@ -248,6 +252,10 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                         let plan = crate::installer::ffmpeg_plan();
                         let ffmpeg_busy = app.setup.ffmpeg_install.busy();
                         theme::card(ui, &p, |ui| {
+                            // Full width like the cards above it, which get
+                            // theirs from a right-aligned button this one
+                            // does not have once ffmpeg has been found.
+                            ui.set_min_width(ui.available_width());
                             ui.horizontal(|ui| {
                                 match &app.setup.found_ffmpeg {
                                     Some(v) => {
@@ -261,7 +269,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                             egui::RichText::new(short).size(11.0).color(p.faint),
                                         );
                                     }
-                                    None if app.setup.detecting => {
+                                    None if app.setup.detecting || !app.setup.ffmpeg_checked => {
                                         ui.label(
                                             egui::RichText::new("looking for ffmpeg...")
                                                 .size(13.0)
@@ -277,7 +285,10 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                     }
                                 }
 
-                                if app.setup.found_ffmpeg.is_none() && !app.setup.detecting {
+                                if app.setup.found_ffmpeg.is_none()
+                                    && !app.setup.detecting
+                                    && app.setup.ffmpeg_checked
+                                {
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),
                                         |ui| match &plan {
@@ -299,6 +310,15 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                             // Elsewhere it needs root, so hand over
                                             // the command rather than asking for it.
                                             crate::installer::FfmpegPlan::Manual { command } => {
+                                                // The note below says to look
+                                                // again, so there has to be
+                                                // something to look again with.
+                                                if theme::pill(ui, &p, "look again", false, true)
+                                                    .clicked()
+                                                {
+                                                    app.setup.ffmpeg_checked = false;
+                                                    app.refresh_ffmpeg(&ctx);
+                                                }
                                                 if theme::pill(
                                                     ui,
                                                     &p,
@@ -342,6 +362,10 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                             ui,
                             &p,
                             match &plan {
+                                // Found: how to install it is beside the point.
+                                _ if app.setup.found_ffmpeg.is_some() => {
+                                    "ffmpeg merges video with audio and does every conversion."
+                                }
                                 crate::installer::FfmpegPlan::Automatic { .. } => {
                                     "ffmpeg merges video with audio and does every conversion. snag installs it through winget, which needs no admin rights, rather than hosting a build of its own."
                                 }

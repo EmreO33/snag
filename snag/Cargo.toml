@@ -1,6 +1,6 @@
 [package]
 name = "snag"
-version = "1.5.4"
+version = "1.5.5"
 edition = "2021"
 description = "Snag - a fast, native video downloader built on yt-dlp"
 authors = ["Snag"]
@@ -36,12 +36,22 @@ notify-rust = "4"
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 tray-icon = "0.19"
 
-# rfd needs a backend chosen per platform: Win32/Cocoa come for free, GTK does not.
-[target.'cfg(not(target_os = "linux"))'.dependencies]
-rfd = { version = "0.15", default-features = false }
+# File dialogs. Win32 and Cocoa come for free; on Linux the backend is one of
+# the two features below, and rfd only pulls either in on Linux, so enabling
+# one elsewhere costs nothing.
+[dependencies.rfd]
+version = "0.15"
+default-features = false
 
-[target.'cfg(target_os = "linux")'.dependencies]
-rfd = { version = "0.15", default-features = false, features = ["gtk3"] }
+[features]
+default = ["gtk-file-dialogs"]
+# GTK's own file chooser: works on every desktop, portal or not. What the
+# .deb, .rpm, AUR package and AppImage use.
+gtk-file-dialogs = ["rfd/gtk3"]
+# The desktop portal's chooser. What the Flatpak uses, built with
+# --no-default-features: a GTK chooser inside the sandbox can only see the
+# sandbox, and the portal's runs outside it.
+portal-file-dialogs = ["rfd/xdg-portal", "rfd/async-std"]
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"

@@ -1,0 +1,49 @@
+# Maintainer: Emre Demir <274893088+EmreO33@users.noreply.github.com>
+#
+# The AUR package, built from the release's Linux tarball rather than from
+# source: the same binary every other Linux package ships, built on an old
+# glibc, and no Rust toolchain needed to install it.
+#
+# The release workflow fills in pkgver and the checksum and pushes this to
+# the AUR. By hand: bump pkgver, run updpkgsums, then
+# makepkg --printsrcinfo > .SRCINFO.
+pkgname=snag-bin
+pkgver=1.5.5
+pkgrel=1
+pkgdesc="Download video and audio from almost any site: a small, fast desktop front end for yt-dlp"
+arch=('x86_64')
+url="https://github.com/EmreO33/snag"
+license=('GPL-3.0-or-later')
+# What the binary links and what it opens at runtime (GL, EGL, X11 and
+# Wayland through winit). namcap calls the runtime ones unneeded, because it
+# only sees what is linked; they are needed. ffmpeg is not optional in
+# practice: without it, merging video with audio fails at the very end of
+# nearly every download.
+depends=(
+  'ffmpeg'
+  'glib2'
+  'glibc'
+  'gtk3'
+  'hicolor-icon-theme'
+  'libgcc'
+  'libglvnd'
+  'libx11'
+  'libxcursor'
+  'libxi'
+  'libxkbcommon'
+  'libxkbcommon-x11'
+  'libxrender'
+  'wayland'
+)
+provides=('snag')
+conflicts=('snag')
+# Snag keeps its own yt-dlp current, in its own folder. A system yt-dlp is
+# used if there is one and Snag has not installed its own.
+optdepends=('yt-dlp: used when snag has not installed its own copy')
+options=('!strip' '!debug')
+source=("snag-${pkgver}-linux-${CARCH}.tar.gz::${url}/releases/download/v${pkgver}/snag-${pkgver}-linux-${CARCH}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cp -a usr "${pkgdir}/"
+}

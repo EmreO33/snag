@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Snag
+GenericName=Video Downloader
+Comment=Download video and audio from YouTube and a thousand other sites
+Exec=snag %U
+Icon=io.github.EmreO33.Snag
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=video;download;youtube;yt-dlp;audio;convert;mp3;
+StartupWMClass=io.github.EmreO33.Snag
+StartupNotify=true

@@ -1,7 +1,7 @@
 use eframe::egui;
 
 use crate::app::SnagApp;
-use crate::selfupdate::{InstallKind, SelfUpdateState};
+use crate::selfupdate::SelfUpdateState;
 use crate::settings::UpdateCheck;
 use crate::theme;
 use crate::updater::UpdateState;
@@ -29,7 +29,11 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             theme::section_title(ui, &p, "snag");
             theme::card(ui, &p, |ui| {
                 ui.horizontal(|ui| {
+                    // Kept clear of the buttons, as on the cards below: an
+                    // error here is long enough to run underneath them.
+                    let text_width = ui.available_width() - BUTTONS_WIDTH;
                     ui.vertical(|ui| {
+                        ui.set_max_width(text_width);
                         ui.label(
                             egui::RichText::new(format!(
                                 "snag {}",
@@ -58,6 +62,10 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                 "updating. snag will close and come back.".to_string(),
                                 p.good,
                             ),
+                            SelfUpdateState::PackageReady { .. } => (
+                                "downloaded and checked. install it with the command below, then restart snag.".to_string(),
+                                p.good,
+                            ),
                             SelfUpdateState::Error(e) => (e.clone(), p.bad),
                         };
                         let short: String = msg.chars().take(120).collect();
@@ -69,14 +77,15 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                         let available =
                             matches!(app.app_update_state, SelfUpdateState::Available { .. });
 
-                        // A copy that Scoop owns must be updated through Scoop,
-                        // or the two end up fighting over the same files.
-                        if app.install_kind == InstallKind::Scoop {
+                        // A copy that Scoop, the AUR, Flathub or the Snap Store
+                        // owns must be updated through them, or the two end up
+                        // fighting over the same files.
+                        if let Some(command) = app.install_kind.managed_command() {
                             if theme::action_button(ui, &p, "copy the command", true, available)
                                 .clicked()
                             {
-                                util::set_clipboard_text("scoop update snag");
-                                app.toast("copied: scoop update snag", false);
+                                util::set_clipboard_text(command);
+                                app.toast(format!("copied: {command}"), false);
                             }
                         } else if theme::action_button(ui, &p, "update snag", true, available && !busy)
                             .clicked()
@@ -105,6 +114,18 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                         util::human_bytes(*got as f64)
                     };
                     ui.label(egui::RichText::new(label).size(12.0).color(p.dim));
+                }
+
+                if let SelfUpdateState::PackageReady { command, .. } = &app.app_update_state {
+                    let command = command.clone();
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if theme::action_button(ui, &p, "copy the command", true, true).clicked() {
+                            util::set_clipboard_text(&command);
+                            app.toast("command copied", false);
+                        }
+                        ui.label(egui::RichText::new(&command).size(12.0).color(p.dim));
+                    });
                 }
 
                 if app.app_update_state == SelfUpdateState::RestartRequired {

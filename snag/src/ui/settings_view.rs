@@ -748,7 +748,7 @@ fn background(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         theme::note_text(
             ui,
             &p,
-            "a tray icon on linux would need libayatana-appindicator at build time, which would add a system dependency to the appimage for an optional feature.",
+            "the linux version has no tray icon yet, so closing the window quits snag. anything still in the queue is remembered and carries on the next time snag opens.",
         );
     }
 

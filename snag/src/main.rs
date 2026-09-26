@@ -27,6 +27,23 @@ mod ytdlp;
 
 use eframe::egui;
 
+/// `snag --version` says which Snag this is and how it was installed, which
+/// is also how it will update itself.
+fn version_and_exit() -> bool {
+    if !std::env::args()
+        .skip(1)
+        .any(|a| a == "--version" || a == "-V")
+    {
+        return false;
+    }
+    println!(
+        "snag {} ({})",
+        selfupdate::current_version(),
+        selfupdate::detect_install_kind().label()
+    );
+    true
+}
+
 /// `snag --print-command <link>` prints the yt-dlp invocation the current
 /// settings would produce, one argument per line, and exits. `--mode=` and
 /// `--format=` stand in for the save screen's choices. Useful for
@@ -56,9 +73,15 @@ fn print_command_and_exit() -> bool {
             .copied()
             .find(|f| f.label() == format);
     }
-    println!("{}", settings.ytdlp_bin());
+    // Written without println!, which panics when the reader goes away
+    // early, as `snag --print-command <link> | head` does.
+    use std::io::Write;
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(out, "{}", settings.ytdlp_bin());
     for arg in ytdlp::build_args(url, mode, overrides, &settings) {
-        println!("{arg}");
+        if writeln!(out, "{arg}").is_err() {
+            break;
+        }
     }
     true
 }
@@ -188,7 +211,11 @@ fn starting_in_tray() -> bool {
 }
 
 fn main() -> eframe::Result<()> {
-    if print_command_and_exit() || install_ytdlp_and_exit() || notify_test_and_exit() {
+    if version_and_exit()
+        || print_command_and_exit()
+        || install_ytdlp_and_exit()
+        || notify_test_and_exit()
+    {
         return Ok(());
     }
 
@@ -208,7 +235,7 @@ fn main() -> eframe::Result<()> {
             .with_title("Snag")
             .with_inner_size([980.0, 660.0])
             .with_min_inner_size([720.0, 480.0])
-            .with_app_id("snag")
+            .with_app_id("io.github.EmreO33.Snag")
             .with_icon(icon::icon_data().unwrap_or_default())
             .with_visible(!to_tray),
         vsync: true,

@@ -3,7 +3,11 @@
 //! How an update should be applied depends entirely on how Snag was installed.
 //! A copy managed by Scoop must be left alone and updated through Scoop, or the
 //! two fight over the same files. An installed copy is best handed back to its
-//! own installer. Only a portable or loose binary is ours to replace directly.
+//! own installer. A Linux package belongs to the package manager that put it
+//! there: a .deb or .rpm update is downloaded and handed over with the one
+//! command that installs it, and the AUR, Flathub and the Snap Store update
+//! their own copies. Only a portable or loose binary is ours to replace
+//! directly.
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -14,6 +18,8 @@ const LATEST_RELEASE_API: &str = "https://api.github.com/repos/EmreO33/snag/rele
 
 /// How this copy of Snag got onto the machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// The Linux package kinds are only ever detected on Linux.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub enum InstallKind {
     /// Managed by Scoop: hands off, tell the user the command.
     Scoop,
@@ -22,6 +28,17 @@ pub enum InstallKind {
     /// Running from an AppImage. The executable we see lives inside a
     /// read-only mount, so the file to replace is the .AppImage itself.
     AppImage,
+    /// Installed from the .deb: dpkg owns the file, and root is needed to
+    /// replace it, so an update is downloaded and handed to apt.
+    Deb,
+    /// Installed from the .rpm, likewise, handed to dnf or zypper.
+    Rpm,
+    /// Installed from the AUR: pacman owns it, and the AUR helper updates it.
+    Aur,
+    /// Installed from Flathub, which updates it.
+    Flatpak,
+    /// Installed from the Snap Store, which updates it.
+    Snap,
     /// A portable copy or a loose binary: safe to replace in place.
     Portable,
 }
@@ -32,6 +49,11 @@ impl InstallKind {
             InstallKind::Scoop => "installed through scoop",
             InstallKind::Installed => "installed with the windows installer",
             InstallKind::AppImage => "running as an appimage",
+            InstallKind::Deb => "installed from the .deb package",
+            InstallKind::Rpm => "installed from the .rpm package",
+            InstallKind::Aur => "installed from the aur",
+            InstallKind::Flatpak => "installed from flathub",
+            InstallKind::Snap => "installed from the snap store",
             InstallKind::Portable => "portable or standalone binary",
         }
     }
@@ -42,7 +64,26 @@ impl InstallKind {
             InstallKind::Scoop => "this copy is managed by scoop, so it updates with 'scoop update snag' rather than replacing itself.",
             InstallKind::Installed => "this copy was installed with the windows installer. an update installs itself quietly and snag restarts: no wizard, nothing to click through.",
             InstallKind::AppImage => "this appimage replaces itself in place. the previous one is kept alongside until the next launch.",
+            InstallKind::Deb => "the package manager owns this copy, so snag does not replace it. an update downloads the new .deb to your downloads folder and gives you the one command that installs it.",
+            InstallKind::Rpm => "the package manager owns this copy, so snag does not replace it. an update downloads the new .rpm to your downloads folder and gives you the one command that installs it.",
+            InstallKind::Aur => "pacman owns this copy, so it updates with the rest of the system, through your aur helper.",
+            InstallKind::Flatpak => "flathub updates this copy along with your other flatpaks, from your software centre or with flatpak update.",
+            InstallKind::Snap => "snaps update themselves in the background. to get it right away, refresh it by hand.",
             InstallKind::Portable => "this copy replaces its own binary in place. the previous one is kept alongside until the next launch.",
+        }
+    }
+}
+
+impl InstallKind {
+    /// The command that updates a copy something else is in charge of, for
+    /// the updates screen to hand over. None when Snag applies the update.
+    pub fn managed_command(&self) -> Option<&'static str> {
+        match self {
+            InstallKind::Scoop => Some("scoop update snag"),
+            InstallKind::Aur => Some("yay -Syu"),
+            InstallKind::Flatpak => Some("flatpak update io.github.EmreO33.Snag"),
+            InstallKind::Snap => Some("sudo snap refresh snag"),
+            _ => None,
         }
     }
 }
@@ -69,7 +110,58 @@ pub fn detect_install_kind() -> InstallKind {
         return InstallKind::Installed;
     }
 
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if let Some(kind) = linux_package_kind(&exe) {
+        return kind;
+    }
+
     InstallKind::Portable
+}
+
+/// Which Linux package, if any, this copy came out of.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn linux_package_kind(exe: &Path) -> Option<InstallKind> {
+    // Both sandboxes say so in the environment they start the app in.
+    if std::env::var_os("FLATPAK_ID").is_some() || Path::new("/.flatpak-info").exists() {
+        return Some(InstallKind::Flatpak);
+    }
+    if std::env::var_os("SNAP").is_some() {
+        return Some(InstallKind::Snap);
+    }
+    // Packages install under /usr. A copy anywhere else was put there by
+    // hand, and is the user's to replace.
+    if !exe.starts_with("/usr") && !exe.starts_with("/opt") {
+        return None;
+    }
+    // Asked of whichever package manager is here, since that is the one
+    // that would object to the file changing under it.
+    let path = exe.display().to_string();
+    let owns = |tool: &str, args: &[&str]| crate::util::run_capture(tool, args).is_ok();
+    if owns("dpkg-query", &["-S", &path]) {
+        Some(InstallKind::Deb)
+    } else if owns("pacman", &["-Qo", &path]) {
+        Some(InstallKind::Aur)
+    } else if owns("rpm", &["-qf", &path]) {
+        Some(InstallKind::Rpm)
+    } else {
+        None
+    }
+}
+
+/// The command that installs a downloaded package file, for the package
+/// manager on this machine.
+fn package_install_command(kind: InstallKind, file: &Path) -> String {
+    let file = file.display();
+    match kind {
+        InstallKind::Deb => format!("sudo apt install \"{file}\""),
+        _ if crate::util::run_capture("dnf", &["--version"]).is_ok() => {
+            format!("sudo dnf install \"{file}\"")
+        }
+        _ if crate::util::run_capture("zypper", &["--version"]).is_ok() => {
+            format!("sudo zypper install \"{file}\"")
+        }
+        _ => format!("sudo rpm -U \"{file}\""),
+    }
 }
 
 /// The .AppImage this process was launched from, if it was.
@@ -116,6 +208,12 @@ pub enum SelfUpdateState {
     /// The installer is waiting for Snag to close so it can replace it, and
     /// will start Snag again afterwards.
     HandedOff,
+    /// A .deb or .rpm is downloaded and checked, and this is the command
+    /// that installs it. Root is needed for that, which Snag does not ask for.
+    PackageReady {
+        path: PathBuf,
+        command: String,
+    },
     Error(String),
 }
 
@@ -147,7 +245,9 @@ fn latest_version() -> Result<String, String> {
     let resp = ureq::get(LATEST_RELEASE_API)
         .set("User-Agent", "Snag")
         .set("Accept", "application/vnd.github+json")
-        .timeout(std::time::Duration::from_secs(15))
+        // Generous for a check nobody is waiting on: a slow network or a
+        // vpn can take most of 15s just to connect.
+        .timeout(std::time::Duration::from_secs(30))
         .call()
         .map_err(|e| format!("could not reach github: {e}"))?;
 
@@ -380,6 +480,8 @@ pub fn install(
         let asset = match kind {
             InstallKind::Installed => format!("Snag-{version}-windows-setup.exe"),
             InstallKind::AppImage => format!("Snag-{version}-x86_64.AppImage"),
+            InstallKind::Deb => format!("snag_{version}_amd64.deb"),
+            InstallKind::Rpm => format!("snag-{version}-1.x86_64.rpm"),
             _ => binary_asset_name().to_string(),
         };
         let url = asset_url(&version, &asset);
@@ -437,6 +539,23 @@ pub fn install(
                 },
                 None => SelfUpdateState::Error("could not find this appimage on disk".into()),
             },
+            InstallKind::Deb | InstallKind::Rpm => {
+                // Somewhere the user will find it again, rather than a temp
+                // folder that is gone after a reboot.
+                let dir = crate::util::default_download_dir();
+                let path = dir.join(&asset);
+                match std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, &bytes)) {
+                    Ok(()) => SelfUpdateState::PackageReady {
+                        command: package_install_command(kind, &path),
+                        path,
+                    },
+                    Err(e) => SelfUpdateState::Error(format!("could not save the package: {e}")),
+                }
+            }
+            // Updated by whatever installed them; the button is not offered.
+            InstallKind::Scoop | InstallKind::Aur | InstallKind::Flatpak | InstallKind::Snap => {
+                SelfUpdateState::Error("this copy is updated by the package manager".into())
+            }
             _ => match replace_self(&bytes) {
                 Ok(()) => SelfUpdateState::RestartRequired,
                 Err(e) => SelfUpdateState::Error(e),

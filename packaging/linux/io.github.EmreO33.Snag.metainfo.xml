@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What software centres (GNOME Software, KDE Discover, Flathub) show for
+     Snag. Every release needs an entry under <releases>: CI checks that the
+     version in Cargo.toml is listed here, as it does for CHANGELOG.md. -->
+<component type="desktop-application">
+  <id>io.github.EmreO33.Snag</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>Snag</name>
+  <summary>Download video and audio from almost any site</summary>
+  <developer id="io.github.emreo33">
+    <name>Emre Demir</name>
+  </developer>
+
+  <description>
+    <p>
+      Snag is a small, fast desktop front end for yt-dlp. Paste a link, pick
+      what you want, and it downloads: from YouTube and more than a thousand
+      other sites.
+    </p>
+    <ul>
+      <li>Video with sound, audio only, or video without sound</li>
+      <li>Pick the quality from what the site actually offers, and the file
+        type for each download: mp4, webm, mkv or mov, or mp3, m4a, ogg,
+        opus, flac or wav</li>
+      <li>Pick items out of a playlist, or take all of them</li>
+      <li>A queue with progress, speed and time left, that survives a
+        restart</li>
+      <li>Clip a section of a video on a timeline, split by chapters, save
+        subtitles</li>
+      <li>Remux, extract audio, mute or turn a file you already have into a
+        GIF</li>
+      <li>A searchable history of everything downloaded</li>
+      <li>Presets for the downloads you keep making</li>
+    </ul>
+    <p>
+      Snag keeps yt-dlp up to date by itself, because sites change and an
+      old yt-dlp is the usual reason a download stops working.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.EmreO33.Snag.desktop</launchable>
+  <provides>
+    <binary>snag</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/EmreO33/snag</url>
+  <url type="bugtracker">https://github.com/EmreO33/snag/issues</url>
+  <url type="vcs-browser">https://github.com/EmreO33/snag</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Paste a link and pick what you want</caption>
+      <image>https://raw.githubusercontent.com/EmreO33/snag/main/assets/screenshots/linux/save.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Downloads in the queue</caption>
+      <image>https://raw.githubusercontent.com/EmreO33/snag/main/assets/screenshots/linux/queue.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Everything downloaded, searchable</caption>
+      <image>https://raw.githubusercontent.com/EmreO33/snag/main/assets/screenshots/linux/history.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Convert a file you already have</caption>
+      <image>https://raw.githubusercontent.com/EmreO33/snag/main/assets/screenshots/linux/remux.png</image>
+    </screenshot>
+  </screenshots>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#e8e8e8</color>
+    <color type="primary" scheme_preference="dark">#0a0a0a</color>
+  </branding>
+
+  <content_rating type="oars-1.1" />
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">720</display_length>
+  </requires>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+  </categories>
+  <keywords>
+    <keyword>video</keyword>
+    <keyword>download</keyword>
+    <keyword>youtube</keyword>
+    <keyword>yt-dlp</keyword>
+    <keyword>mp3</keyword>
+  </keywords>
+
+  <releases>
+    <release version="1.5.5" date="2026-09-26">
+      <description>
+        <p>Linux packages: a .deb, an .rpm and a Flatpak alongside the
+          AppImage, which now starts on current distributions without
+          libfuse2. Converting a downloaded mkv to mp4 works, and "show in
+          folder" selects the file.</p>
+      </description>
+    </release>
+    <release version="1.5.4" date="2026-09-26">
+      <description>
+        <p>Pick the format for each download, search history, and more
+          formats: mov, m4a and flac. webm and wav downloads no longer fail
+          at the very end.</p>
+      </description>
+    </release>
+    <release version="1.5.3" date="2026-09-25">
+      <description>
+        <p>Starting in the tray no longer flashes the window.</p>
+      </description>
+    </release>
+  </releases>
+</component>

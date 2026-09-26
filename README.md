@@ -69,14 +69,27 @@ From the [releases page](https://github.com/EmreO33/snag/releases/latest):
 | `Snag-<version>-windows-portable.zip` | **Portable.** Unzip and run. Keeps everything in a `data` folder beside the executable and writes nothing else to the machine. |
 | `snag-windows-x86_64.exe` | The bare executable, if you would rather manage it yourself. |
 
-**Linux** &mdash; take the **AppImage**:
+**Linux** &mdash; a package for your distro, or the AppImage for any of them:
 
 | file | what it is |
 | --- | --- |
-| `Snag-<version>-x86_64.AppImage` | **Recommended.** Runs on any distro with glibc 2.35+, and integrates with your application menu. `chmod +x` and run. |
-| `snag-linux-x86_64` | The bare binary. Needs glibc 2.39+, so Ubuntu 24.04 or newer. |
+| `snag_<version>_amd64.deb` | **Ubuntu, Debian, Mint, Pop!_OS.** `sudo apt install ./snag_<version>_amd64.deb` pulls in everything it needs, ffmpeg included. |
+| `snag-<version>-1.x86_64.rpm` | **Fedora, openSUSE.** `sudo dnf install ./snag-<version>-1.x86_64.rpm`, or `sudo zypper install` on openSUSE. |
+| `Snag-<version>-x86_64.flatpak` | **Any distro with Flatpak.** `flatpak install ./Snag-<version>-x86_64.flatpak`. Carries its own ffmpeg and yt-dlp. |
+| `Snag-<version>-x86_64.AppImage` | **Any distro, nothing installed.** `chmod +x` and run. Updates itself. |
+| `snag-<version>-linux-x86_64.tar.gz` | The installed tree (`usr/bin`, the menu entry, the icon), for packagers. |
+| `snag-linux-x86_64` | The bare binary. |
 
-Both need `libgtk-3-0` present, which Snag uses only for the file picker.
+Everything is built on Ubuntu 22.04, so it runs on glibc 2.35 or newer: Ubuntu
+22.04, Debian 12, Fedora 36, openSUSE Leap 15.5 and anything since. Tested on
+Ubuntu 26.04, Fedora 44, openSUSE Tumbleweed and Arch.
+
+Flathub, the Snap Store and the AUR are on the way.
+
+A copy from a package updates the way that package does: Snag downloads the
+new .deb or .rpm and hands you the one command that installs it, and leaves a
+Flatpak, a snap or an AUR install to its store. The AppImage and the bare
+binary replace themselves.
 
 **macOS** &mdash; `snag-macos-aarch64`, a bare binary. It builds in CI but nobody
 has run it yet.
@@ -310,7 +323,8 @@ every panic location.
 ```bash
 snag --view=settings                 # open straight to a screen
 snag --print-command <link>          # print the yt-dlp invocation and exit
-snag --print-command <link> --mode=audio
+snag --print-command <link> --mode=audio --format=flac
+snag --version                       # the version, and how this copy updates
 snag --install-ytdlp                 # install yt-dlp headlessly and exit
 snag --install-ytdlp /some/dir       # ...into a specific folder
 snag <link>                          # open with the link already in the box
@@ -367,8 +381,16 @@ thread with a killable child process, and nothing blocks the render loop.
 
 CI runs `cargo fmt --check`, `cargo clippy -D warnings` and a release build on
 Windows, Linux and macOS for every push. Pushing a `v*` tag builds every
-artifact (including the Windows installer and portable zip) and publishes them
-to a GitHub release.
+artifact (the Windows installer and portable zip; the Linux AppImage, .deb,
+.rpm, Flatpak and snap) and publishes them to a GitHub release. Each Linux
+package is installed and started in CI before anything is published.
+
+The Linux packages are built by `packaging/linux/build-packages.sh`, which
+runs the same locally:
+
+```bash
+bash packaging/linux/build-packages.sh 1.5.5 snag/target/release/snag dist
+```
 
 ## Credit
 

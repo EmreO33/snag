@@ -22,6 +22,51 @@ jobs:
           version="$(grep -m1 '^version = ' snag/Cargo.toml | cut -d'"' -f2)"
           bash packaging/release-notes.sh "v$version" check
 
+  # The Linux packages each carry the version somewhere of their own, and a
+  # release that forgets one ships a store listing that is out of date.
+  linux-packaging:
+    name: linux packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install the validators
+        run: |
+          sudo find /etc/apt/sources.list.d -type f ! -name 'ubuntu.*' -delete
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends desktop-file-utils appstream
+          python3 -m pip install --quiet aiohttp tomlkit
+
+      - name: the desktop entry and the metadata are valid
+        run: |
+          desktop-file-validate packaging/linux/io.github.EmreO33.Snag.desktop
+          appstreamcli validate --no-net packaging/linux/io.github.EmreO33.Snag.metainfo.xml
+
+      - name: the metadata and the flatpak manifest name this version
+        run: |
+          version="$(grep -m1 '^version = ' snag/Cargo.toml | cut -d'"' -f2)"
+          metainfo=packaging/linux/io.github.EmreO33.Snag.metainfo.xml
+          manifest=packaging/flatpak/io.github.EmreO33.Snag.yml
+          if ! grep -q "<release version=\"$version\"" "$metainfo"; then
+            echo "::error::the metainfo has no <release> for $version"
+            exit 1
+          fi
+          if ! grep -q "tag: v$version$" "$manifest"; then
+            echo "::error::the flatpak manifest does not build v$version"
+            exit 1
+          fi
+
+      # Flathub builds offline, from exactly the crates listed here. A
+      # Cargo.lock change without regenerating this breaks the Flathub build.
+      - name: the flatpak's crate list matches Cargo.lock
+        run: |
+          curl -fsSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+          python3 flatpak-cargo-generator.py snag/Cargo.lock -o /tmp/cargo-sources.json
+          if ! diff -q /tmp/cargo-sources.json packaging/flatpak/cargo-sources.json; then
+            echo "::error::packaging/flatpak/cargo-sources.json is stale: regenerate it from Cargo.lock"
+            exit 1
+          fi
+
   check:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -62,6 +107,12 @@ jobs:
       - name: clippy
         working-directory: snag
         run: cargo clippy --all-targets -- -D warnings
+
+      # The Flatpak's build: the portal's file dialogs instead of GTK's.
+      - name: clippy, portal file dialogs
+        if: runner.os == 'Linux'
+        working-directory: snag
+        run: cargo clippy --all-targets --no-default-features --features portal-file-dialogs -- -D warnings
 
       - name: test
         working-directory: snag

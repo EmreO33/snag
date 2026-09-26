@@ -8,6 +8,10 @@ on:
       tag:
         description: "tag to publish the binaries under"
         required: true
+      publish:
+        description: "publish a release (off builds every package and stops there)"
+        type: boolean
+        default: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -58,43 +62,18 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  unix:
-    name: ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            asset: snag-linux-x86_64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            asset: snag-macos-aarch64
-
+  macos:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: aarch64-apple-darwin
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: snag
-
-      - name: install linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          # The runner image ships third party apt repositories, and a bad
-          # index on any one of them fails the whole update with exit 100.
-          # Everything below comes from ubuntu's own archive, so they go
-          # before apt is asked anything. Ubuntu's own sources are kept.
-          sudo find /etc/apt/sources.list.d -type f ! -name 'ubuntu.*' -delete
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libgtk-3-dev libxkbcommon-dev libxcb-render0-dev \
-            libxcb-shape0-dev libxcb-xfixes0-dev libx11-dev libgl1-mesa-dev
 
       - name: build
         working-directory: snag
@@ -102,29 +81,31 @@ jobs:
         # was built on. The Windows job gets this from the packaging script.
         run: |
           export RUSTFLAGS="--remap-path-prefix=$HOME/.cargo=[cargo] --remap-path-prefix=$GITHUB_WORKSPACE=[snag]"
-          cargo build --release --target ${{ matrix.target }}
+          cargo build --release --target aarch64-apple-darwin
 
       - name: stage the binary
-        run: cp "snag/target/${{ matrix.target }}/release/snag" "${{ matrix.asset }}"
+        run: cp snag/target/aarch64-apple-darwin/release/snag snag-macos-aarch64
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset }}
-          path: ${{ matrix.asset }}
+          name: snag-macos-aarch64
+          path: snag-macos-aarch64
           if-no-files-found: error
 
-
-  # Built inside an older ubuntu than the runner so the result is not pinned to
-  # the runner's glibc: the plain binary needs 2.39, which rules out anything
-  # older than Ubuntu 24.04.
-  appimage:
+  # Every Linux package, from one binary built inside an older Ubuntu than
+  # the runner so it is not pinned to the runner's glibc: this one needs
+  # 2.35, so Ubuntu 22.04, Debian 12, Fedora 36 and anything newer.
+  linux:
     runs-on: ubuntu-latest
     container: ubuntu:22.04
     steps:
       - name: install build dependencies
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends             curl ca-certificates build-essential file desktop-file-utils             libgtk-3-dev libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev             libxcb-xfixes0-dev libx11-dev libgl1-mesa-dev pkg-config
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            curl ca-certificates build-essential file desktop-file-utils appstream \
+            libgtk-3-dev libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libx11-dev libgl1-mesa-dev pkg-config
 
       - uses: actions/checkout@v4
 
@@ -139,49 +120,113 @@ jobs:
           export RUSTFLAGS="--remap-path-prefix=$HOME/.cargo=[cargo] --remap-path-prefix=$GITHUB_WORKSPACE=[snag]"
           cargo build --release
 
-      - name: assemble the AppDir
+      - name: the desktop entry and the metadata are valid
         run: |
-          set -eux
-          APPDIR=AppDir
-          mkdir -p "$APPDIR/usr/bin"                    "$APPDIR/usr/share/applications"                    "$APPDIR/usr/share/icons/hicolor/256x256/apps"                    "$APPDIR/usr/share/metainfo"
-          cp snag/target/release/snag "$APPDIR/usr/bin/snag"
-          cp packaging/linux/AppRun "$APPDIR/AppRun"
-          chmod +x "$APPDIR/AppRun"
-          cp packaging/linux/snag.desktop "$APPDIR/snag.desktop"
-          cp packaging/linux/snag.desktop "$APPDIR/usr/share/applications/snag.desktop"
-          cp assets/icon.png "$APPDIR/snag.png"
-          cp assets/icon.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/snag.png"
-          desktop-file-validate "$APPDIR/snag.desktop"
+          desktop-file-validate packaging/linux/io.github.EmreO33.Snag.desktop
+          appstreamcli validate --no-net packaging/linux/io.github.EmreO33.Snag.metainfo.xml
 
-      - name: build the AppImage
+      - name: build the packages
         run: |
-          set -eux
           tag="${{ inputs.tag || github.ref_name }}"
-          version="${tag#v}"
-          curl -fsSL -o appimagetool             https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool
-          # No FUSE inside the container, so run the tool from its own extraction.
-          ARCH=x86_64 ./appimagetool --appimage-extract-and-run             AppDir "Snag-$version-x86_64.AppImage"
-          file "Snag-$version-x86_64.AppImage"
+          bash packaging/linux/build-packages.sh "${tag#v}" snag/target/release/snag dist
 
-      # Building it proves nothing about whether it runs. Execute it here, on
-      # the same old glibc it claims to support, and check it can reach the
-      # network too by resolving a real yt-dlp command.
-      - name: run the AppImage
+      # Building them proves nothing about whether they run. Install the deb
+      # into this very system, on the old glibc it claims to support, and
+      # start the AppImage without FUSE, the way a container has to.
+      - name: the packages install and run
         run: |
           set -eux
           ldd --version | head -1
-          chmod +x Snag-*.AppImage
-          ./Snag-*.AppImage --appimage-extract-and-run             --print-command "https://example.com/video" | head -3
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ./dist/snag_*_amd64.deb
+          snag --version
+          snag --version | grep -q "installed from the .deb package"
+          ./dist/Snag-*-x86_64.AppImage --appimage-extract-and-run --version
+          ./dist/Snag-*-x86_64.AppImage --appimage-extract-and-run \
+            --print-command "https://example.com/video" | head -3
 
       - uses: actions/upload-artifact@v4
         with:
-          name: appimage
-          path: Snag-*.AppImage
+          name: linux
+          path: |
+            dist/Snag-*.AppImage
+            dist/snag_*.deb
+            dist/snag-*.rpm
+            dist/snag-*-linux-x86_64.tar.gz
+            dist/snag-linux-x86_64
           if-no-files-found: error
 
+  # The Flatpak, built from the manifest Flathub builds from, so a change
+  # that breaks it is found here rather than in Flathub's build queue. The
+  # bundle it makes goes on the release page too, for anyone without Flathub.
+  flatpak:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-26.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      # Built from this checkout rather than from the tag the manifest names,
+      # so the job also works on a run that is not a release.
+      - name: point the manifest at this checkout
+        run: |
+          python3 - <<'PY'
+          import re
+          p = 'packaging/flatpak/io.github.EmreO33.Snag.yml'
+          s = open(p).read()
+          s, n = re.subn(r"      - type: git\n        url: https://github.com/EmreO33/snag.git\n        tag: v[0-9.]+\n",
+                         "      - type: dir\n        path: ../..\n", s)
+          assert n == 1, "the snag source in the manifest has changed shape"
+          open(p, 'w').write(s)
+          PY
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: packaging/flatpak/io.github.EmreO33.Snag.yml
+          bundle: Snag-${{ inputs.tag || github.ref_name }}-x86_64.flatpak
+          upload-artifact: false
+          cache-key: flatpak-builder-${{ github.sha }}
+
+      - name: rename the bundle
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          mv "Snag-$tag-x86_64.flatpak" "Snag-${tag#v}-x86_64.flatpak"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: Snag-*.flatpak
+          if-no-files-found: error
+
+  # The snap, built in the same clean environment the Snap Store uses. It is
+  # uploaded to the store only once the store credentials exist as a secret;
+  # until then it is built, and attached to the release, and that is all.
+  snap:
+    runs-on: ubuntu-latest
+    env:
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: snapcore/action-build@v1
+        id: build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snap
+          path: ${{ steps.build.outputs.snap }}
+          if-no-files-found: error
+
+      - name: publish to the snap store
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && (github.event_name == 'push' || inputs.publish)
+        uses: snapcore/action-publish@v1
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: stable
+
   publish:
-    needs: [windows, unix, appimage]
+    needs: [windows, macos, linux, flatpak, snap]
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -202,7 +247,7 @@ jobs:
       # the Scoop manifest reads its hashes straight out of this file.
       - name: write checksums
         working-directory: dist
-        run: sha256sum Snag-* snag-* | tee SHA256SUMS.txt
+        run: sha256sum Snag-* snag-* snag_* | tee SHA256SUMS.txt
 
       - name: build the release notes
         id: notes
@@ -229,4 +274,42 @@ jobs:
           files: |
             dist/Snag-*
             dist/snag-*
+            dist/snag_*
             dist/SHA256SUMS.txt
+
+  # The AUR package, once there is a key to push it with: the PKGBUILD gets
+  # this release's version and the tarball's checksum, and goes up. Without
+  # the AUR_SSH_PRIVATE_KEY secret this step does nothing.
+  aur:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: fill in the version and checksum
+        id: pkgbuild
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$AUR_KEY" ]; then
+            echo "no AUR_SSH_PRIVATE_KEY secret, so nothing is pushed to the AUR"
+            echo "push=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tag="${{ inputs.tag || github.ref_name }}"
+          version="${tag#v}"
+          url="https://github.com/EmreO33/snag/releases/download/$tag/snag-$version-linux-x86_64.tar.gz"
+          sum="$(curl -fsSL "$url" | sha256sum | cut -d' ' -f1)"
+          sed -i "s/^pkgver=.*/pkgver=$version/; s/^pkgrel=.*/pkgrel=1/; s/^sha256sums=.*/sha256sums=('$sum')/" packaging/aur/PKGBUILD
+          cat packaging/aur/PKGBUILD
+          echo "push=true" >> "$GITHUB_OUTPUT"
+
+      - uses: KSXGitHub/github-actions-deploy-aur@v4
+        if: steps.pkgbuild.outputs.push == 'true'
+        with:
+          pkgname: snag-bin
+          pkgbuild: packaging/aur/PKGBUILD
+          commit_username: Emre Demir
+          commit_email: 274893088+EmreO33@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Update to ${{ inputs.tag || github.ref_name }}

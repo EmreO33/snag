@@ -8,6 +8,50 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.5
+
+- **Linux packages.** Alongside the AppImage there is now a .deb for
+  Ubuntu, Debian and Mint, an .rpm for Fedora and openSUSE, and a Flatpak.
+  Each was installed and used on a real system before this went out:
+  Ubuntu 26.04, Fedora 44, openSUSE Tumbleweed and Arch, with the Flatpak
+  built and run on Ubuntu. A packaged copy knows it is one, and updates the
+  way its package does rather than trying to overwrite a file it does not
+  own.
+- **The AppImage starts on a current Linux.** It needed libfuse2, which
+  Ubuntu stopped installing in 22.04 and Fedora and Arch never do, so on
+  most fresh systems it would not open at all. It is built with the new
+  runtime now, which needs nothing extra.
+- **"No such file or directory" on every download**, after installing
+  yt-dlp during setup and closing Snag before finishing it. Setup showed the
+  new yt-dlp as found, but only remembered where it was if both happened in
+  one sitting. Snag now always uses the yt-dlp it installed. This was on
+  Windows too.
+- **Converting an mkv Snag downloaded to mp4 or mov always failed.** Every
+  mkv carries its thumbnail as an attached file, which those containers
+  cannot hold, and the whole remux failed over it. Attachments are now left
+  out when the container cannot take them, and subtitles are converted to
+  the kind it can. On every platform.
+- A webm remux that cannot work now says why: webm only holds vp8, vp9 or
+  av1 with opus or vorbis, and ffmpeg's own message named neither.
+- **A yt-dlp that cannot update itself** (from apt, pacman, or inside the
+  Flatpak) used to end "update now" with an error telling you to go and
+  update it elsewhere. Snag now installs its own current copy instead, and
+  uses that from then on.
+- On Linux, "show in folder" opens the file manager with the file selected,
+  as it does on Windows, rather than just opening the folder.
+- On Linux, the download folder defaulted to "." wherever the system had no
+  Downloads folder registered, which is most minimal installs. It is
+  ~/Downloads now.
+- Setup's ffmpeg card said to "look again" and had no button to do it with.
+  It has one now.
+- The error under "snag" on the updates screen could run underneath the
+  check and update buttons. It wraps now, like the others.
+- Update checks wait 30 seconds for GitHub rather than 15, which a slow
+  connection or a VPN could take just to connect.
+- Fedora's ffmpeg is `ffmpeg-free`; the command setup offered there asked
+  for a package that only exists once RPM Fusion is added.
+- `snag --version` says which version this is and how it was installed.
+
 ## 1.5.4
 
 - **Pick the format before downloading.** A new format row under the mode
