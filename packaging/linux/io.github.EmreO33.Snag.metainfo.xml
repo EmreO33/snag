@@ -96,6 +96,12 @@
   </keywords>
 
   <releases>
+    <release version="1.5.7" date="2026-09-26">
+      <description>
+        <p>The tray menu works on the first click, and closing to the tray
+          no longer plays the minimise animation.</p>
+      </description>
+    </release>
     <release version="1.5.6" date="2026-09-26">
       <description>
         <p>Fixes for the snap and the Flatpak: the snap's ffmpeg starts, its

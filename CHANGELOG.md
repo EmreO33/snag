@@ -8,6 +8,24 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.7
+
+- **The tray menu works on the first click.** With Snag sitting in the
+  tray, "Show Snag", "Quit" and "Download what I copied" only took effect
+  on the second click. The click was received, but the wake-up it sent was
+  lost inside the menu, so Snag slept on until something else happened.
+  This was there since the tray arrived; earlier tests sent the click in a
+  way that woke Snag by accident. Found and checked with real clicks.
+- The same wake-up now reaches Snag whenever it is minimised, so a
+  download that finishes in the background starts the next one and says
+  so straight away, rather than when the window is next touched.
+- **Closing to the tray just closes**, the way Discord does: no minimise
+  animation, the window is simply gone. It comes back in place too.
+  Recorded at 40 frames a second, 1.5.6 shrank away over 170ms; this is
+  gone from one frame to the next.
+- A left click on the tray icon opens Snag. The menu is on the right
+  button; before, a left click opened the menu too.
+
 ## 1.5.6
 
 - **The snap's ffmpeg did not start**, so every snap download that needed

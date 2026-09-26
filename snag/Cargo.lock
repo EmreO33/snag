@@ -3316,7 +3316,7 @@ dependencies = [
 
 [[package]]
 name = "snag"
-version = "1.5.6"
+version = "1.5.7"
 dependencies = [
  "arboard",
  "directories",
