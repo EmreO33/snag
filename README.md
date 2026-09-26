@@ -2,437 +2,267 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/logo.png">
-  <img src="assets/logo-on-light.png" alt="Snag" width="150">
+  <img src="assets/logo-on-light.png" alt="Snag" width="140">
 </picture>
 
 # Snag
 
-**A small, fast, native desktop video downloader.**
+**Paste a link, pick what you want, done.**
 
-Rust + egui, no webview, no bundled runtime: one ~5 MB binary that starts instantly.
+A small, fast desktop video and audio downloader for YouTube and a thousand other sites.<br>
+Native Rust, no browser inside, one small binary that starts instantly.
 
+[![release](https://img.shields.io/github/v/release/EmreO33/snag?label=release&color=0a0a0a)](https://github.com/EmreO33/snag/releases/latest)
+[![snap](https://img.shields.io/badge/snap%20store-snag-0a0a0a?logo=snapcraft)](https://snapcraft.io/snag)
 [![ci](https://github.com/EmreO33/snag/actions/workflows/ci.yml/badge.svg)](https://github.com/EmreO33/snag/actions/workflows/ci.yml)
-[![release](https://img.shields.io/github/v/release/EmreO33/snag)](https://github.com/EmreO33/snag/releases/latest)
+[![licence](https://img.shields.io/badge/licence-GPL--3.0-0a0a0a)](LICENSE)
+
+[**Download**](#install) · [Features](#features) · [Report a bug](https://github.com/EmreO33/snag/issues)
+
+<br>
+
+<img src="assets/screenshots/linux/save.png" alt="Snag with a link loaded, showing the video's thumbnail and the qualities on offer" width="760">
 
 </div>
 
-Snag is a front end for **yt-dlp**. It builds the yt-dlp command from your
-settings, runs it, and reads the progress back. Merging, remuxing and audio
-conversion are handled by **ffmpeg**, which yt-dlp calls on its own.
+<br>
 
-<div align="center">
-
-![Snag checking a link before downloading it](assets/screenshots/save.png)
-
-*Paste a link and Snag tells you what it is: thumbnail, title, channel,
-duration, and the qualities the site actually offers.*
-
-</div>
+## Install
 
 <table>
-<tr>
-<td width="50%"><img src="assets/screenshots/queue.png" alt="The download queue"></td>
-<td width="50%"><img src="assets/screenshots/history.png" alt="Download history"></td>
-</tr>
-<tr>
-<td align="center"><b>queue</b> &mdash; live progress, speed and ETA</td>
-<td align="center"><b>history</b> &mdash; remembered across restarts</td>
-</tr>
-<tr>
-<td width="50%"><img src="assets/screenshots/remux.png" alt="Remuxing a local file"></td>
-<td width="50%"><img src="assets/screenshots/settings.png" alt="Settings"></td>
-</tr>
-<tr>
-<td align="center"><b>remux</b> &mdash; rewrap or convert what you already have</td>
-<td align="center"><b>settings</b> &mdash; every knob, in plain language</td>
-</tr>
-</table>
+<tr><th>Windows</th><th>Linux</th><th>macOS</th></tr>
+<tr valign="top">
+<td>
 
-> [!IMPORTANT]
-> **Only the Windows build has actually been tested so far.** The Linux and
-> macOS binaries compile in CI and are published on every release, but nobody
-> has run them yet, so treat them as untested.
->
-> **Found a bug?** Please open one on the
-> [issues page](https://github.com/EmreO33/snag/issues). Include your OS, what
-> you were downloading, and the job log from the queue screen if there is one.
+**[Installer](https://github.com/EmreO33/snag/releases/latest)**<br>
+`Snag-<version>-windows-setup.exe`
 
-## Download
-
-From the [releases page](https://github.com/EmreO33/snag/releases/latest):
-
-**Windows** &mdash; pick one:
-
-| file | what it is |
-| --- | --- |
-| `Snag-<version>-windows-setup.exe` | **Installer.** Installs for you or for all users, adds a Start Menu entry, and uninstalls cleanly. |
-| `Snag-<version>-windows-portable.zip` | **Portable.** Unzip and run. Keeps everything in a `data` folder beside the executable and writes nothing else to the machine. |
-| `snag-windows-x86_64.exe` | The bare executable, if you would rather manage it yourself. |
-
-**Linux** &mdash; a package for your distro, or the AppImage for any of them:
-
-| file | what it is |
-| --- | --- |
-| `snag_<version>_amd64.deb` | **Ubuntu, Debian, Mint, Pop!_OS.** `sudo apt install ./snag_<version>_amd64.deb` pulls in everything it needs, ffmpeg included. |
-| `snag-<version>-1.x86_64.rpm` | **Fedora, openSUSE.** `sudo dnf install ./snag-<version>-1.x86_64.rpm`, or `sudo zypper install` on openSUSE. |
-| `Snag-<version>-x86_64.flatpak` | **Any distro with Flatpak.** `flatpak install ./Snag-<version>-x86_64.flatpak`. Carries its own ffmpeg and yt-dlp. |
-| `Snag-<version>-x86_64.AppImage` | **Any distro, nothing installed.** `chmod +x` and run. Updates itself. |
-| `snag-<version>-linux-x86_64.tar.gz` | The installed tree (`usr/bin`, the menu entry, the icon), for packagers. |
-| `snag-linux-x86_64` | The bare binary. |
-
-Everything is built on Ubuntu 22.04, so it runs on glibc 2.35 or newer: Ubuntu
-22.04, Debian 12, Fedora 36, openSUSE Leap 15.5 and anything since. Tested on
-Ubuntu 26.04, Fedora 44, openSUSE Tumbleweed and Arch.
-
-Or from the [Snap Store](https://snapcraft.io/snag), which keeps it updated:
-
-```bash
-sudo snap install snag
-```
-
-An AUR package is on the way.
-
-A copy from a package updates the way that package does: Snag downloads the
-new .deb or .rpm and hands you the one command that installs it, and leaves a
-Flatpak, a snap or an AUR install to its store. The AppImage and the bare
-binary replace themselves.
-
-**macOS** &mdash; `snag-macos-aarch64`, a bare binary. It builds in CI but nobody
-has run it yet.
-
-Every release also publishes `SHA256SUMS.txt` if you want to check a download.
-
-### Scoop
-
-Snag is its own [Scoop](https://scoop.sh) bucket, so it installs and updates
-with two commands and no admin rights:
-
+or with [Scoop](https://scoop.sh):
 ```powershell
 scoop bucket add snag https://github.com/EmreO33/snag
 scoop install snag
 ```
 
-This uses the portable build, and your settings live in Scoop's persisted
-folder, so `scoop update snag` keeps them. ffmpeg is suggested but not
-installed for you: `scoop install ffmpeg` covers it.
+</td>
+<td>
 
-### Portable mode
+**[Snap Store](https://snapcraft.io/snag)**
+```bash
+sudo snap install snag
+```
+or a `.deb`, `.rpm`, Flatpak or AppImage from the **[releases page](https://github.com/EmreO33/snag/releases/latest)**
 
-Portable is a behaviour, not a separate build: any copy of Snag turns portable
-when a file named `portable.txt` sits next to the executable (the portable zip
-ships one), or when it is started with `--portable`. In that mode the settings
-file and any Snag-installed yt-dlp live in `<folder>/data` instead of
-`%APPDATA%\Snag\config`, and nothing outside the folder is touched, except the
-Start Menu shortcut above when notifications are on. Delete the marker file and it
-reverts to the normal behaviour.
+</td>
+<td>
 
-## First run
+`snag-macos-aarch64` from the **[releases page](https://github.com/EmreO33/snag/releases/latest)**
 
-Snag asks three things once, then never again:
+Builds, but nobody has run it yet.
 
-1. **where settings live** &mdash; defaults to `%APPDATA%\Snag\config`, or pick any
-   folder. The choice is recorded in a one-line pointer file at the default
-   location, so Snag can find it next time. A portable copy skips this question:
-   its settings always sit beside the executable.
-2. **where downloads go** &mdash; defaults to your Downloads folder.
-3. **yt-dlp** &mdash; Snag looks for it on `PATH`. If it is not there, one click
-   downloads the current release from the yt-dlp project's own GitHub releases
-   into `<config>/bin`.
+</td>
+</tr>
+</table>
 
-**Snag ships neither yt-dlp nor ffmpeg**, and hosts no build of its own. yt-dlp
-comes from that project's GitHub releases; ffmpeg comes from your platform's
-package manager. Both stay on their own release cadence rather than going stale
-inside Snag.
+Snag uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) to download and [ffmpeg](https://ffmpeg.org) to merge and convert. On first run it installs yt-dlp for you and keeps it up to date; on Windows it installs ffmpeg too, and elsewhere it gives you the one command that does.
 
-## What it does
+<details>
+<summary><b>Every download, and which one to pick</b></summary>
 
-**save** &mdash; paste a link, pick a mode, download.
+<br>
 
-Snag checks the link as you paste it and shows what it is: thumbnail, title,
-channel, duration, and the qualities the site actually offers, so you can
-override the quality for one download without touching your settings.
+**Windows**
 
-| mode | what you get |
+| file | what it is |
 | --- | --- |
-| `auto` | video + audio, merged into one file |
-| `audio` | audio track only, converted to your chosen format |
-| `mute` | video only, audio track dropped |
+| `Snag-<version>-windows-setup.exe` | Installer. For you or for everyone on the PC, with a Start menu entry and a clean uninstall. Updates install quietly. |
+| `Snag-<version>-windows-portable.zip` | Portable. Unzip and run; everything stays in a `data` folder beside it. |
+| `snag-windows-x86_64.exe` | The bare executable. |
 
-Under the mode buttons, **format** picks the file type for the next download
-without changing your settings: mp4, webm, mkv or mov for video, and best,
-mp3, m4a, ogg, opus, flac or wav for audio. webm only holds vp9 and av1, and
-mov only h264, so choosing one of those downloads a codec it can hold rather
-than failing at the end.
+**Linux** (built on Ubuntu 22.04, so glibc 2.35 or newer; tested on Ubuntu, Fedora, openSUSE and Arch)
 
-Paste several links at once (one per line) and they all queue up. Paste a
-**playlist** and Snag lists what it holds and asks whether you want just the
-one you linked, all of them, or a pick: tick the items you want and each one
-queues as its own download.
+| file | install with |
+| --- | --- |
+| `snag_<version>_amd64.deb` | `sudo apt install ./snag_<version>_amd64.deb` (Ubuntu, Debian, Mint, Pop!_OS) |
+| `snag-<version>-1.x86_64.rpm` | `sudo dnf install ./snag-…rpm` (Fedora) or `sudo zypper install ./snag-…rpm` (openSUSE) |
+| `Snag-<version>-x86_64.flatpak` | `flatpak install ./Snag-<version>-x86_64.flatpak`, brings its own ffmpeg and yt-dlp |
+| `Snag-<version>-x86_64.AppImage` | `chmod +x` and run, nothing to install |
+| `snag-<version>-linux-x86_64.tar.gz` | the installed file tree, for packagers |
+| `snag-linux-x86_64` | the bare binary |
 
-**presets** &mdash; a name for the mode, quality and extras you use often.
-Set a download up the way you like it, save it as a preset, and it is one
-click under the mode buttons from then on. A preset sets the real settings
-rather than hiding an override somewhere, and a download keeps the preset it
-was queued with, so changing your mind never reaches back into the queue.
-Manage them in **settings &rarr; presets**, or use one from a script with
-`snag --preset="music" <link> --download`.
+Arch users can build the package from [`packaging/aur/PKGBUILD`](packaging/aur/PKGBUILD) with `makepkg -si`; an AUR listing is on the way.
 
-**queue** &mdash; live progress, speed, ETA and size per job, with cancel, retry,
-open, show-in-folder, copy-link and a per-job log. Runs several downloads at
-once, up to the limit you set.
+Every copy updates the way it was installed: the installer, AppImage and bare binaries update themselves, a `.deb`, `.rpm` or Flatpak copy downloads the next package and gives you the command to install it, and Scoop and the Snap Store handle their own. Every release publishes `SHA256SUMS.txt`, and Snag checks its own updates against it.
 
-**background** &mdash; optional, and off by default. Closing the window can put
-Snag in the system tray instead of quitting it, and it can watch the clipboard:
-copy a link anywhere and Snag offers it, rather than downloading it behind your
-back. Nothing but the clipboard's text is read, none of it is stored, and none
-of it leaves the machine.
+</details>
 
-**living in the tray** &mdash; optional, and off by default. Snag can start
-with Windows straight into the tray, so it is there before you need it. The
-tray menu has **download what I copied**, which takes the link on your
-clipboard and downloads it without a window opening at all, and there is a
-setting to skip even that: **just download what i copy** queues every link
-the moment you copy it, with the mode and quality currently set. Everything
-about it is in **settings &rarr; background**.
+<details>
+<summary><b>Portable mode</b></summary>
 
-**notifications** &mdash; a download that finishes or fails while Snag is
-hidden, minimised or behind another window says so with a desktop
-notification. In front, the message in the corner is enough. Off in
-**settings &rarr; background** if you would rather not.
+<br>
 
-On Windows, a notification is only shown for an app that has a Start Menu
-shortcut carrying its app id, the same thing Discord, Chrome and every Electron
-app keep for themselves. The installer's shortcuts carry it; a Scoop copy
-stamps the shortcut Scoop made; a portable copy keeps one shortcut of its own
-in your Start Menu, and turning notifications off removes it.
+Any copy of Snag is portable when a file named `portable.txt` sits next to it (the portable zip ships one) or when it starts with `--portable`. Its settings and its own yt-dlp then live in a `data` folder beside it, and nothing else on the machine is touched, apart from one Start menu shortcut when notifications are on (Windows needs it to show them).
 
-**youtube sign-in** &mdash; for age restricted, private and members-only videos.
+</details>
 
-Snag has no login form and never asks for your password: handing an account
-password to a downloader is something YouTube treats as suspicious, and Snag has
-no business holding one. Sign in to YouTube in your browser as you normally
-would, pick that browser in **settings &rarr; youtube**, and Snag borrows the
-session from it. There is a **check sign-in** button that says plainly whether it
-worked, which browser it read, and what went wrong if it did not.
+## Features
 
-The session is scoped to YouTube links by default, so it is never offered to
-other sites you download from. That scope can be turned off if you need cookies
-elsewhere.
+<table>
+<tr>
+<td width="50%"><img src="assets/screenshots/linux/queue.png" alt="The download queue with one download running"></td>
+<td width="50%"><img src="assets/screenshots/linux/history.png" alt="Download history with a search box"></td>
+</tr>
+<tr>
+<td align="center"><b>queue</b>: progress, speed and time left</td>
+<td align="center"><b>history</b>: everything, searchable</td>
+</tr>
+</table>
 
-Worth knowing before you use it: downloading from YouTube is against YouTube's
-terms whether you are signed in or not, and signing in ties that activity to
-your account in a way that downloading without it does not. YouTube can answer
-with bot checks, with throttling, and in rare cases by closing the account. Use
-a second Google account for this rather than your main one. An exported
-`cookies.txt` is as good as your password, so keep it out of shared folders and
-out of repositories. Snag says all of this on the screen itself as well.
+- **Three modes.** Video with sound, audio only, or video without sound.
+- **Real choices.** Snag checks a link before downloading and offers the qualities the site actually has. Pick the file type per download too: mp4, webm, mkv or mov, or mp3, m4a, ogg, opus, flac or wav.
+- **Playlists.** Take the one video you linked, the whole list, or tick the ones you want.
+- **A queue that keeps going.** Several downloads at once, cancel and retry, a log per job, and it picks up where it left off after a restart.
+- **Clips.** Cut out part of a video on a filmstrip timeline, split by chapters, save subtitles.
+- **Remux.** Change the container, pull out the audio, mute, or make a GIF, from files you already have.
+- **Presets.** Save the setup you keep using and apply it in one click.
+- **Lives in the tray** (Windows). Close it and it keeps running; copy a link anywhere and it offers to download it, or just does. Can start with Windows.
+- **Notifications** when a download finishes or fails while Snag is out of sight.
+- **YouTube sign-in** for age-restricted and members-only videos, borrowed from your browser, never a password.
+- **Keeps itself working.** Sites change and yt-dlp follows; Snag keeps yt-dlp current and updates itself.
+- **Plain language everywhere,** readable by screen readers, in dark, dim or light with six accents.
 
-On Windows, the Chromium browsers (Chrome, Edge, Brave, Opera, Vivaldi) now
-encrypt their cookie store so that only the browser itself can read it, and no
-external tool can undo that. **Firefox is the one that reliably works.** The
-alternative anywhere is an exported `cookies.txt`, which Snag takes in
-preference to a browser profile.
+When a download fails, Snag says why in words (age-gated, private, blocked in your country, rate limited) and what to do about it, with yt-dlp's own message underneath.
 
-**history** &mdash; every finished download, remembered across restarts. Open the
-file, show it in its folder, download it again, or copy the link back out. A
-search box finds a download by any words from its title, link or file name. Says
-plainly when a file has been moved or deleted rather than offering a button
-that would fail.
+<details>
+<summary><b>YouTube sign-in: how it works, and the risks</b></summary>
 
-**remux** &mdash; work on a file you already have, without re-downloading:
+<br>
 
-- change container (mp4 / mkv / webm / mov), stream-copied, near-instant
-- extract audio (copy, or re-encode to aac / mp3 / opus / flac)
-- mute, dropping the audio track and keeping the video untouched
-- convert to GIF, with frame rate and width controls
+Snag has no login form and never asks for a password. Sign in to YouTube in your browser as usual, pick that browser in **settings → youtube**, and Snag borrows the session from it. **check sign-in** says whether it worked and what went wrong if not. The session is only used for YouTube links unless you turn that off.
 
-Drag a file onto the window to load it straight into remux.
+**Firefox is the browser that reliably works on Windows.** Chrome, Edge, Brave, Opera and Vivaldi now encrypt their cookies so only they can read them. An exported `cookies.txt` works anywhere.
 
-**updates** &mdash; keeps both Snag and yt-dlp current.
+Worth knowing first: downloading from YouTube is against YouTube's terms whether you are signed in or not, and signing in ties it to your account. YouTube can answer with bot checks, throttling, and rarely by closing the account, so use a spare Google account rather than your main one. A `cookies.txt` is as good as your password: keep it out of shared folders and repositories.
 
-Sites break yt-dlp often, so Snag reads the latest release tag from GitHub and
-compares it to your installed version. Check never, on launch, daily or weekly,
-and either install on a click or let it install automatically. The install runs
-yt-dlp's own self-update.
+</details>
 
-Snag updates itself on the same schedule, in whichever way suits how it was
-installed: a Scoop copy is left to Scoop (Snag just hands you the command), an
-installed copy downloads the new installer and runs it, an AppImage replaces
-the .AppImage file itself rather than the read-only copy inside its mount, and
-a portable or standalone copy replaces its own binary in place. Downloads are checked against
-the release's published `SHA256SUMS.txt` and thrown away on a mismatch.
+<details>
+<summary><b>All the settings</b></summary>
 
-## Settings
+<br>
 
-- **appearance** &mdash; dark / dim / light, six accents, interface scale, compact queue
-- **video** &mdash; quality up to 8k, codec (h264+aac / av1+opus / vp9+opus), container
-  (mp4 / webm / mkv / mov),
-  h265 toggle, prefer free formats, frame rate cap
-- **audio** &mdash; format (best / mp3 / m4a / ogg / opus / flac / wav), bitrate, prefer better
-  quality, loudness normalisation, preferred dub language
-- **metadata** &mdash; embed metadata, thumbnail, chapters and subtitles; save the
-  thumbnail separately; SponsorBlock removal; keep the original upload date
-- **local processing** &mdash; download folder, output template with presets, restrict
-  file names, overwrite policy, keep source after remux, downloads at once,
-  fragments per download
-- **network** &mdash; proxy, speed limit, retries, socket timeout, custom user agent
-- **youtube** &mdash; sign in by borrowing a browser session, check that it worked,
-  point at a cookies.txt instead, and choose whether the session is scoped to
-  YouTube links
-- **advanced** &mdash; yt-dlp and ffmpeg paths, ignore playlists, verbose log,
-  extra yt-dlp arguments, and a live preview of the exact command Snag runs
+| tab | what's in it |
+| --- | --- |
+| appearance | dark, dim or light; six accents; interface scale; compact queue; animations |
+| presets | save, rename and delete presets |
+| video | quality up to 8K; h264, av1 or vp9; mp4, webm, mkv or mov; h265; frame rate cap |
+| audio | best, mp3, m4a, ogg, opus, flac or wav; bitrate; loudness normalisation; dub language |
+| metadata | embed metadata, thumbnail, chapters, subtitles; subtitle files; SponsorBlock; keep upload dates |
+| local processing | download folder, file name template, overwrites, downloads at once, hardware encoding for clips |
+| background | tray, start with Windows, clipboard watching, notifications |
+| network | proxy, speed limit, retries, timeouts, user agent |
+| youtube | browser session or cookies.txt, and check sign-in |
+| advanced | yt-dlp and ffmpeg paths, extra yt-dlp arguments, and a preview of the exact command Snag runs |
 
-Settings are saved automatically to `settings.json` in the platform config
-directory (`%APPDATA%\Snag` on Windows).
+Settings save themselves, to `%APPDATA%\Snag\config` on Windows and `~/.config/snag` on Linux, or wherever you chose on first run.
 
-**accessibility** &mdash; Snag reports itself to screen readers. Every control
-says what it is, what it is called and whether it is on, including the ones
-Snag paints itself, and text boxes are named by what belongs in them.
+</details>
 
-## Requirements
+<details>
+<summary><b>Command line</b></summary>
 
-- **yt-dlp** &mdash; on `PATH`, installed by Snag on first run, or pointed at in
-  settings &gt; advanced
-- **ffmpeg** &mdash; needed for merging, remuxing and audio conversion. On
-  Windows, Snag installs it for you through winget (`Gyan.FFmpeg`), which needs
-  no admin rights. Elsewhere installing it needs root, which Snag will not ask
-  for, so it hands you the right command for your package manager instead.
-
-## Build
+<br>
 
 ```bash
+snag <link>                          # open with the link already in the box
+snag <link> --download               # queue it straight away, for browser integration
+snag --preset="music" <link> --download
+snag --view=settings                 # open on a screen: home, queue, remux, history, settings, updates, about
+snag --version                       # the version, and how this copy updates
+snag --print-command <link>          # print the yt-dlp command Snag would run
+snag --print-command <link> --mode=audio --format=flac
+snag --install-ytdlp [folder]        # install yt-dlp without the window
+snag --notify-test                   # check that notifications show
+snag --portable                      # run as a portable copy
+```
+
+</details>
+
+## Building
+
+<details>
+<summary><b>Build it yourself</b></summary>
+
+<br>
+
+```bash
+cd snag
 cargo build --release
 ```
 
-The binary lands at `snag/target/release/snag.exe`. Debug builds keep a console
-window; release builds do not.
+On Linux you need the GTK 3 and X11 development packages first (`libgtk-3-dev libxkbcommon-dev libx11-dev libgl1-mesa-dev` on Debian and Ubuntu).
 
-To build the Windows release artifacts (bare exe, portable zip and installer)
-into `dist/`:
+The release artifacts come from scripts that remap source paths, so a binary carries nothing about the machine that built it:
 
 ```powershell
-.\packaging\build-windows.ps1
+.\packaging\build-windows.ps1          # exe, portable zip and installer (needs Inno Setup)
 ```
-
-The installer step needs [Inno Setup](https://jrsoftware.org/isinfo.php)
-(`winget install JRSoftware.InnoSetup`); without it the script builds the other
-two and says so.
-
-Build through the script (or CI) rather than a bare `cargo build --release` for
-anything you intend to hand to someone else: it remaps source paths, so the
-binary carries nothing about the machine that built it. A plain release build
-bakes the builder's cargo registry path, and therefore their username, into
-every panic location.
-
-## Command line
-
 ```bash
-snag --view=settings                 # open straight to a screen
-snag --print-command <link>          # print the yt-dlp invocation and exit
-snag --print-command <link> --mode=audio --format=flac
-snag --version                       # the version, and how this copy updates
-snag --install-ytdlp                 # install yt-dlp headlessly and exit
-snag --install-ytdlp /some/dir       # ...into a specific folder
-snag <link>                          # open with the link already in the box
-snag --notify-test                   # check whether desktop notifications work
-snag <link> --download               # queue it immediately, for browser integration
+bash packaging/linux/build-packages.sh <version> snag/target/release/snag dist
+                                       # AppImage, .deb, .rpm, tar.gz
 ```
 
-`--print-command` prints one argument per line using the current settings, which
-is the quickest way to see exactly what Snag would run.
+Pushing a `v*` tag builds everything in CI, installs and starts each Linux package, then publishes the GitHub release and the snap. CI runs `cargo fmt`, `clippy -D warnings` and the tests on Windows, Linux and macOS for every push.
 
-## Layout
+</details>
+
+<details>
+<summary><b>How the code is laid out</b></summary>
+
+<br>
 
 ```
-src/
-  main.rs        entry point, CLI flags, window setup
-  app.rs         application state, event pumps, view routing
-  theme.rs       palette and the custom widgets (pills, toggles, bars)
-  settings.rs    every setting, with serde persistence
-  ytdlp.rs       argument construction and progress-line parsing
-  jobs.rs        the download queue and its worker threads
-  remux.rs       ffmpeg operations
-  updater.rs     version check and self-update
-  bootstrap.rs   resolves where the config lives
-  probe.rs       asks yt-dlp what a link is, before downloading it
-  clipboard.rs   watching for copied links
-  tray.rs        the system tray icon
-  window.rs      restoring the window, which eframe cannot do reliably
-  history.rs     what has been downloaded, across restarts
-  selfupdate.rs  updating Snag itself
-  installer.rs   fetches yt-dlp from its GitHub releases
-  icon.rs        the window icon, rasterized at startup
+snag/src/
+  main.rs        entry point, command line, window setup
+  app.rs         application state and the event pumps
   ui/            one module per screen
+  theme.rs       palette and the custom widgets
+  motion.rs      the animations
+  settings.rs    every setting, saved as JSON
+  ytdlp.rs       building yt-dlp's arguments and reading its progress
+  probe.rs       asking yt-dlp what a link is before downloading it
+  jobs.rs        the download queue and its worker threads
+  history.rs     what has been downloaded
+  remux.rs       ffmpeg operations on local files
+  installer.rs   fetching yt-dlp and deno, finding ffmpeg
+  updater.rs     keeping yt-dlp current
+  selfupdate.rs  updating Snag, the right way for each kind of install
+  tray.rs        the tray icon and its menu
+  window.rs      hiding and restoring the window for the tray
+  clipboard.rs   watching for copied links
+  notify.rs      desktop notifications
 
 packaging/
-  build-windows.ps1     builds the exe, portable zip and installer into dist/
-  windows/snag.iss      the Inno Setup installer script
-  portable/             the files that ship inside the portable zip
-  linux/                the desktop entry and AppRun used by the AppImage
-
-bucket/
-  snag.json             the Scoop manifest, which makes this repo a bucket
+  windows/       the Inno Setup installer
+  portable/      what ships in the portable zip
+  linux/         desktop entry, AppStream metadata, nfpm config, package script
+  flatpak/       the Flatpak manifest
+  aur/           the Arch PKGBUILD
+snap/            the snap
+bucket/          the Scoop manifest, which makes this repository a bucket
 ```
 
-When a download fails, Snag translates yt-dlp's message into something
-actionable where it recognises it &mdash; age-gated, private, geo-blocked, rate
-limited, and so on each come with the remedy &mdash; and keeps the original
-underneath.
-
-Progress is read through a custom `--progress-template`, so parsing does not
-depend on yt-dlp's human-readable output format. Every job runs on its own
-thread with a killable child process, and nothing blocks the render loop.
-
-## Builds
-
-CI runs `cargo fmt --check`, `cargo clippy -D warnings` and a release build on
-Windows, Linux and macOS for every push. Pushing a `v*` tag builds every
-artifact (the Windows installer and portable zip; the Linux AppImage, .deb,
-.rpm, Flatpak and snap) and publishes them to a GitHub release. Each Linux
-package is installed and started in CI before anything is published.
-
-The Linux packages are built by `packaging/linux/build-packages.sh`, which
-runs the same locally:
-
-```bash
-bash packaging/linux/build-packages.sh 1.5.5 snag/target/release/snag dist
-```
+</details>
 
 ## Credit
 
-Snag's interface is **heavily inspired by [cobalt.tools](https://cobalt.tools)**:
-the mode pills, the single link field, the plain-language settings copy, and the
-remux idea all come from there.
+Snag's look is **heavily inspired by [cobalt.tools](https://cobalt.tools)**: the mode pills, the single link box, the plain-language settings and the remux idea all come from there. Snag is **not affiliated with cobalt or its developers** in any way; any faults are Snag's own.
 
-Snag is **not affiliated with, endorsed by, or connected to cobalt or its
-developers in any way.** It is a separate project that borrows their design
-ideas, and any faults in it are Snag's own.
-
-The downloading is done by [yt-dlp](https://github.com/yt-dlp/yt-dlp) and the
-media work by [ffmpeg](https://ffmpeg.org). Both are separate projects; Snag
-simply drives them.
-
-## Bugs and requests
-
-Open an issue at
-[github.com/EmreO33/snag/issues](https://github.com/EmreO33/snag/issues).
-Windows reports are the most actionable right now, since that is the only
-platform the app has been run on; Linux and macOS reports are welcome too and
-help confirm whether those builds actually work.
+The downloading is done by [yt-dlp](https://github.com/yt-dlp/yt-dlp) and the media work by [ffmpeg](https://ffmpeg.org), both separate projects that Snag runs as programs.
 
 ## Licence
 
-Snag is free software under the **GNU General Public License, version 3 or
-later**. You may use, study, change and share it; if you distribute a modified
-version, it has to stay under the same licence and you have to make the source
-available. The full text is in [LICENSE](LICENSE).
+Free software under the **GNU General Public License, version 3 or later** ([LICENSE](LICENSE)). Use it, study it, change it and share it; a modified version you distribute stays under the same licence, with its source. No warranty.
 
-It comes with absolutely no warranty.
+<br>
 
-yt-dlp and ffmpeg are separate projects under their own licences. Snag runs
-them as external programs and does not bundle or link against either.
-
-## A note
-
-You are responsible for what you download. Respect the terms of the sites you
-use and the rights of the people who made what you are saving.
+<sub>You are responsible for what you download. Respect the terms of the sites you use and the people who made what you save.</sub>
