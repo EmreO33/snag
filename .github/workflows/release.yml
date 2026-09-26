@@ -120,10 +120,10 @@ jobs:
           export RUSTFLAGS="--remap-path-prefix=$HOME/.cargo=[cargo] --remap-path-prefix=$GITHUB_WORKSPACE=[snag]"
           cargo build --release
 
-      - name: the desktop entry and the metadata are valid
-        run: |
-          desktop-file-validate packaging/linux/io.github.EmreO33.Snag.desktop
-          appstreamcli validate --no-net packaging/linux/io.github.EmreO33.Snag.metainfo.xml
+      # The metadata is validated by ci.yml on a current Ubuntu: 22.04's
+      # appstream predates tags Flathub now requires, and warns about them.
+      - name: the desktop entry is valid
+        run: desktop-file-validate packaging/linux/io.github.EmreO33.Snag.desktop
 
       - name: build the packages
         run: |

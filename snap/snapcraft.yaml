@@ -53,6 +53,9 @@ parts:
     plugin: rust
     source: .
     rust-path: [snag]
+    rust-channel: stable
+    build-snaps:
+      - rustup
     build-packages:
       - libgtk-3-dev
       - libxkbcommon-dev
