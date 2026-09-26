@@ -1,0 +1,36 @@
+name: snap upload
+
+# Upload a release's snap, exactly as published on its GitHub release page,
+# to the Snap Store. The release workflow does this by itself for new
+# releases; this is for one that went out before the store was set up, or
+# one that needs publishing again.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag whose snap to upload, e.g. v1.5.5"
+        required: true
+      channel:
+        description: "store channel to release it to"
+        default: stable
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: fetch the snap from the release
+        id: fetch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.tag }}"
+          gh release download "$tag" -R "${{ github.repository }}" -p "snag_*_amd64.snap"
+          ls -la snag_*.snap
+          echo "snap=$(ls snag_*_amd64.snap | head -1)" >> "$GITHUB_OUTPUT"
+
+      - uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.fetch.outputs.snap }}
+          release: ${{ inputs.channel }}
