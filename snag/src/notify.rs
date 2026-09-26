@@ -23,6 +23,7 @@
 /// The id Windows knows Snag by. The installer stamps it onto the shortcuts
 /// it creates, and the process claims it at startup, so a pinned taskbar
 /// button, the running window and the toast all agree on who they are.
+#[cfg(windows)]
 pub const APP_ID: &str = "EmreO33.Snag";
 
 /// Show a notification. Returns whether the desktop accepted it, which on

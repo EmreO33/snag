@@ -527,6 +527,7 @@ rem simply deletes itself makes cmd complain that it has gone missing.
 
 /// The uninstall entry the Windows installer writes, whose location says
 /// whether this copy was installed for everyone or just for this user.
+#[cfg(windows)]
 const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{CF8CC397-F68D-4940-8897-10A39126914A}_is1";
 
 /// Does updating this copy need administrator?
