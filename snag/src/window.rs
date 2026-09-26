@@ -26,6 +26,20 @@ pub fn restore() -> bool {
     false
 }
 
+/// Make sure the app runs a frame soon, from any thread, even while the
+/// window sits minimised in the tray.
+///
+/// `request_repaint` is not enough on its own there. eframe runs the app from
+/// redraws, and Windows does not redraw a minimised window, so an idle Snag
+/// in the tray slept through whatever had just happened: a tray menu click
+/// took effect on the second click, and a finished download started the next
+/// one late. An input message is an event eframe answers whatever state the
+/// window is in, so a minimised window gets one of those as well.
+pub fn wake() {
+    #[cfg(windows)]
+    imp::wake();
+}
+
 /// Put the window into the tray before anyone sees it, from a thread of its
 /// own, started before the window exists.
 ///
@@ -91,7 +105,10 @@ mod imp {
         fn IsWindowVisible(window: isize) -> i32;
         fn GetWindowTextLengthW(window: isize) -> i32;
         fn IsIconic(window: isize) -> i32;
+        fn PostMessageW(window: isize, message: u32, wparam: usize, lparam: isize) -> i32;
     }
+
+    const WM_MOUSEMOVE: u32 = 0x0200;
 
     #[repr(C)]
     #[derive(Default)]
@@ -207,6 +224,20 @@ mod imp {
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
+    pub fn wake() {
+        let window = MAIN_WINDOW.load(Ordering::Relaxed);
+        if window == 0 {
+            return;
+        }
+        unsafe {
+            if IsIconic(window) != 0 {
+                // Nowhere in particular: a minimised window has nothing under
+                // the pointer to hover.
+                PostMessageW(window, WM_MOUSEMOVE, 0, 0);
+            }
         }
     }
 

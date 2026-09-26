@@ -494,7 +494,11 @@ impl SnagApp {
 
     fn repainter(ctx: &egui::Context) -> impl Fn() + Send + Clone + 'static {
         let ctx = ctx.clone();
-        move || ctx.request_repaint()
+        move || {
+            ctx.request_repaint();
+            // Not enough while minimised in the tray: see window::wake.
+            crate::window::wake();
+        }
     }
 
     pub fn active_job_count(&self) -> usize {

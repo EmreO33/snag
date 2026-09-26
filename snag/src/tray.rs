@@ -62,6 +62,12 @@ mod imp {
                     // replaced since. Not ours to act on.
                     continue;
                 };
+                // Bring the window up from here rather than waiting for the
+                // app to get round to it: that is the one thing asked for,
+                // and it needs nothing from the app.
+                if command == TrayCommand::Show {
+                    crate::window::restore();
+                }
                 if tx.send(command).is_err() {
                     return;
                 }
@@ -90,6 +96,7 @@ mod imp {
                 if !wanted {
                     continue;
                 }
+                crate::window::restore();
                 if tx.send(TrayCommand::Show).is_err() {
                     return;
                 }
@@ -122,6 +129,11 @@ mod imp {
 
         let icon = TrayIconBuilder::new()
             .with_tooltip("Snag")
+            // A left click shows Snag, as it does for Discord and most tray
+            // apps; the menu is on the right button. tray-icon opens the
+            // menu on either button unless told otherwise, so a left click
+            // never reached the "show me" it was meant to be.
+            .with_menu_on_left_click(false)
             .with_icon(image)
             .with_menu(Box::new(menu))
             .build()
