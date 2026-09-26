@@ -218,8 +218,38 @@ pub fn js_runtime_args() -> Vec<String> {
     }
 }
 
+/// The settings this one download runs with: its own format choices laid
+/// over the global ones, and a codec its container can actually hold.
+fn for_this_download(overrides: &JobOverrides, s: &Settings) -> Settings {
+    let mut s = s.clone();
+    if let Some(container) = overrides.container {
+        s.video.container = container;
+    }
+    if let Some(format) = overrides.audio_format {
+        s.audio.format = format;
+    }
+    // Asking for webm with h264 set, or mov with av1, used to download the
+    // whole thing and then fail the remux. Downloading a codec the container
+    // takes costs nothing and gets the file that was asked for.
+    s.video.codec = s.video.container.fitting_codec(s.video.codec);
+    s
+}
+
+/// Whether the file this download ends up as can carry a cover picture.
+///
+/// yt-dlp refuses webm and wav outright, and it refuses at the very end, so
+/// asking would fail a download that had otherwise finished. Better a file
+/// without its thumbnail than no file.
+fn takes_thumbnail(mode: Mode, s: &Settings) -> bool {
+    match mode {
+        Mode::Audio => s.audio.format != AudioFormat::Wav,
+        Mode::Auto | Mode::Mute => s.video.container.resolve(s.video.codec) != "webm",
+    }
+}
+
 /// Full argument vector for downloading `url` in `mode`.
 pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) -> Vec<String> {
+    let s = &for_this_download(&overrides, s);
     let mut a: Vec<String> = Vec::new();
     let push = |a: &mut Vec<String>, v: &str| a.push(v.to_string());
     a.extend(js_runtime_args());
@@ -311,7 +341,7 @@ pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) 
     if m.embed_metadata {
         push(&mut a, "--embed-metadata");
     }
-    if m.embed_thumbnail {
+    if m.embed_thumbnail && takes_thumbnail(mode, s) {
         push(&mut a, "--embed-thumbnail");
     }
     if m.embed_chapters {
@@ -481,6 +511,58 @@ pub fn explain_error(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// The value following `flag`, if the flag is there at all.
+    fn after<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+        let at = args.iter().position(|a| a == flag)?;
+        args.get(at + 1).map(String::as_str)
+    }
+
+    #[test]
+    fn a_format_picked_for_one_download_beats_the_settings() {
+        use super::*;
+        let s = Settings::default(); // h264, auto container, mp3
+        let mkv = JobOverrides {
+            container: Some(Container::Mkv),
+            ..Default::default()
+        };
+        let args = build_args("https://example.test/v", Mode::Auto, mkv, &s);
+        assert_eq!(after(&args, "--merge-output-format"), Some("mkv"));
+        assert_eq!(after(&args, "--remux-video"), Some("mkv"));
+
+        let flac = JobOverrides {
+            audio_format: Some(AudioFormat::Flac),
+            ..Default::default()
+        };
+        let args = build_args("https://example.test/v", Mode::Audio, flac, &s);
+        assert_eq!(after(&args, "--audio-format"), Some("flac"));
+        // Lossless, so no bitrate to ask for.
+        assert_eq!(after(&args, "--audio-quality"), None);
+    }
+
+    #[test]
+    fn webm_downloads_a_codec_webm_can_hold_and_skips_the_thumbnail() {
+        use super::*;
+        let s = Settings::default(); // h264, which webm cannot hold
+        let webm = JobOverrides {
+            container: Some(Container::Webm),
+            ..Default::default()
+        };
+        let args = build_args("https://example.test/v", Mode::Auto, webm, &s);
+        let sort = after(&args, "-S").unwrap_or_default();
+        assert!(sort.contains("vcodec:vp9"), "{sort}");
+        assert!(!sort.contains("h264"), "{sort}");
+        assert!(!args.iter().any(|a| a == "--embed-thumbnail"));
+
+        // And a format that can take a thumbnail still gets one.
+        let args = build_args(
+            "https://example.test/v",
+            Mode::Auto,
+            JobOverrides::default(),
+            &s,
+        );
+        assert!(args.iter().any(|a| a == "--embed-thumbnail"));
+    }
+
     #[test]
     fn picked_playlist_items_are_asked_for_by_position() {
         use super::*;

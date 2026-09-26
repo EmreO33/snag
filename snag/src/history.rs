@@ -29,6 +29,24 @@ impl Entry {
         self.file.as_ref().is_some_and(|f| f.is_file())
     }
 
+    /// Whether this is what someone typing `query` is looking for: every
+    /// word they typed turns up somewhere in the title, the link, the file
+    /// name or the mode, in any order and any case. An empty query matches.
+    pub fn matches(&self, query: &str) -> bool {
+        let file = self
+            .file
+            .as_ref()
+            .and_then(|f| f.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let haystack =
+            format!("{} {} {} {}", self.title, self.url, file, self.mode.label()).to_lowercase();
+        query
+            .to_lowercase()
+            .split_whitespace()
+            .all(|word| haystack.contains(word))
+    }
+
     pub fn display_name(&self) -> &str {
         if self.title.is_empty() {
             &self.url
@@ -99,6 +117,23 @@ mod tests {
             bytes: 1.0,
             finished_unix: 0,
         }
+    }
+
+    #[test]
+    fn search_takes_every_word_in_any_order_and_case() {
+        let mut e = entry("https://youtu.be/abc");
+        e.title = "Lofi Beats To Study To".to_string();
+        e.mode = Mode::Audio;
+        e.file = Some(std::path::Path::new("Music").join("lofi beats.mp3"));
+        assert!(e.matches(""));
+        assert!(e.matches("study lofi"));
+        assert!(e.matches("BEATS"));
+        assert!(e.matches("youtu.be"));
+        assert!(e.matches("mp3"));
+        assert!(e.matches("audio"));
+        assert!(!e.matches("lofi jazz"));
+        // The folder is not part of what is searched, only the file's name.
+        assert!(!e.matches("music"));
     }
 
     #[test]

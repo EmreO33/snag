@@ -203,11 +203,12 @@ fn job_card(
                         .size(12.0)
                         .color(color),
                 );
-                ui.label(
-                    egui::RichText::new(job.mode.label())
-                        .size(12.0)
-                        .color(p.faint),
-                );
+                // The format too, when this one was told to be different.
+                let kind = match job.overrides.format_label(job.mode) {
+                    Some(format) => format!("{}, {format}", job.mode.label()),
+                    None => job.mode.label().to_string(),
+                };
+                ui.label(egui::RichText::new(kind).size(12.0).color(p.faint));
             });
         });
 

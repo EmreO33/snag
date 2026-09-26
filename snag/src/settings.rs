@@ -123,6 +123,7 @@ choice_enum! {
         Mp4 => "mp4",
         Webm => "webm",
         Mkv => "mkv",
+        Mov => "mov",
     }
     default: Auto
 }
@@ -135,6 +136,32 @@ impl Container {
             Container::Mp4 => "mp4",
             Container::Webm => "webm",
             Container::Mkv => "mkv",
+            Container::Mov => "mov",
+        }
+    }
+
+    /// Whether this container can hold what the codec setting downloads.
+    /// Remuxing into one that cannot is an ffmpeg failure at the very end of
+    /// a download, after all the waiting.
+    pub fn holds(&self, codec: VideoCodec) -> bool {
+        match self {
+            Container::Auto | Container::Mkv | Container::Mp4 => true,
+            // webm is vp8/vp9/av1 with opus/vorbis and nothing else.
+            Container::Webm => codec != VideoCodec::H264,
+            // mov takes vp9 and av1 badly and opus not at all.
+            Container::Mov => codec == VideoCodec::H264,
+        }
+    }
+
+    /// The codec to download instead when this container cannot hold the
+    /// one the settings ask for.
+    pub fn fitting_codec(&self, codec: VideoCodec) -> VideoCodec {
+        if self.holds(codec) {
+            codec
+        } else if *self == Container::Webm {
+            VideoCodec::Vp9
+        } else {
+            VideoCodec::H264
         }
     }
 }
@@ -143,9 +170,11 @@ choice_enum! {
     AudioFormat {
         Best => "best",
         Mp3 => "mp3",
+        M4a => "m4a",
         Ogg => "ogg",
-        Wav => "wav",
         Opus => "opus",
+        Flac => "flac",
+        Wav => "wav",
     }
     default: Mp3
 }
@@ -156,7 +185,9 @@ impl AudioFormat {
         match self {
             AudioFormat::Best => "best",
             AudioFormat::Mp3 => "mp3",
+            AudioFormat::M4a => "m4a",
             AudioFormat::Ogg => "vorbis",
+            AudioFormat::Flac => "flac",
             AudioFormat::Wav => "wav",
             AudioFormat::Opus => "opus",
         }
@@ -165,7 +196,7 @@ impl AudioFormat {
     pub fn is_lossy(&self) -> bool {
         matches!(
             self,
-            AudioFormat::Mp3 | AudioFormat::Ogg | AudioFormat::Opus
+            AudioFormat::Mp3 | AudioFormat::M4a | AudioFormat::Ogg | AudioFormat::Opus
         )
     }
 }

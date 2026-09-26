@@ -8,6 +8,31 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.4
+
+- **Pick the format before downloading.** A new format row under the mode
+  buttons sets the file type for the next download only, so an mp3 today
+  does not mean changing what every download is from now on. It shows what
+  the settings would have given ("from settings (mp4)") so there is no
+  going to look. Asked for by a user who was downloading mp4s and converting
+  them afterwards.
+- **More formats**, both there and in settings: mov for video, and m4a and
+  flac for audio. Every format was downloaded for real and checked with
+  ffprobe before this went out: mp4, webm, mkv and mov, plus mov and webm
+  with no sound, and best, mp3, m4a, ogg, opus, flac and wav.
+- **webm and wav downloads no longer fail at the very end.** Embedding the
+  thumbnail is on by default, and yt-dlp cannot put a picture in either of
+  those, so every webm or wav download finished downloading and then
+  failed. The thumbnail is now left out for those two and nothing else.
+- **webm with h264 selected no longer fails either.** webm cannot hold h264,
+  and mov cannot hold vp9, av1 or opus, so picking one of those containers
+  now downloads a codec it can hold instead of downloading the whole video
+  and then failing to remux it.
+- **Search in history.** Type any words from a title, link or file name, in
+  any order, and the list narrows to what matches. Escape clears it.
+- The queue says which format a download was told to take, when it is not
+  the one from the settings.
+
 ## 1.5.3
 
 - **Starting in the tray now starts in the tray.** Snag opened its window and

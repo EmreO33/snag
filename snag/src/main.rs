@@ -28,7 +28,8 @@ mod ytdlp;
 use eframe::egui;
 
 /// `snag --print-command <link>` prints the yt-dlp invocation the current
-/// settings would produce, one argument per line, and exits. Useful for
+/// settings would produce, one argument per line, and exits. `--mode=` and
+/// `--format=` stand in for the save screen's choices. Useful for
 /// checking what Snag is actually doing without starting a download.
 fn print_command_and_exit() -> bool {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -42,8 +43,21 @@ fn print_command_and_exit() -> bool {
         Some("mute") => settings::Mode::Mute,
         _ => settings::Mode::Auto,
     };
+    // `--format=mkv` or `--format=flac`: what the save screen's format row
+    // sets for one download.
+    let mut overrides = jobs::JobOverrides::default();
+    if let Some(format) = args.iter().find_map(|a| a.strip_prefix("--format=")) {
+        overrides.container = settings::Container::ALL
+            .iter()
+            .copied()
+            .find(|c| c.label() == format);
+        overrides.audio_format = settings::AudioFormat::ALL
+            .iter()
+            .copied()
+            .find(|f| f.label() == format);
+    }
     println!("{}", settings.ytdlp_bin());
-    for arg in ytdlp::build_args(url, mode, jobs::JobOverrides::default(), &settings) {
+    for arg in ytdlp::build_args(url, mode, overrides, &settings) {
         println!("{arg}");
     }
     true

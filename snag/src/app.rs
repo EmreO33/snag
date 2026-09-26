@@ -13,7 +13,7 @@ use crate::jobs::{Job, JobEvent, JobOverrides, JobState};
 use crate::probe::{ProbeResult, ProbeState};
 use crate::remux::{RemuxEvent, RemuxOp, RemuxState};
 use crate::selfupdate::{self, InstallKind, SelfUpdateEvent, SelfUpdateState};
-use crate::settings::{Mode, Settings};
+use crate::settings::{AudioFormat, Container, Mode, Settings};
 use crate::theme::{self, Palette};
 use crate::tray::{Tray, TrayCommand};
 use crate::ui;
@@ -250,6 +250,11 @@ pub struct SnagApp {
     /// Playlist positions ticked for a pick, counted from one.
     pub playlist_picks: std::collections::BTreeSet<usize>,
     pub height_override: Option<u32>,
+    /// The next download's container, chosen on the save screen rather than
+    /// taken from the settings. Kept until that download is queued.
+    pub container_override: Option<Container>,
+    /// The same for the next audio download's format.
+    pub audio_format_override: Option<AudioFormat>,
     /// The preview image for the link in the box, keyed by the url it came
     /// from so a late arrival for an older link is ignored.
     pub thumbnail: Option<(String, egui::TextureHandle)>,
@@ -257,6 +262,8 @@ pub struct SnagApp {
     thumb_rx: Receiver<(String, egui::ColorImage)>,
 
     pub history: History,
+    /// What is typed in the history screen's search box.
+    pub history_search: String,
 
     /// Set while the window is hidden and Snag is only in the tray.
     /// The screen shown last frame and when it last changed, so a new one
@@ -382,10 +389,13 @@ impl SnagApp {
             playlist_choice: PlaylistChoice::One,
             playlist_picks: Default::default(),
             height_override: None,
+            container_override: None,
+            audio_format_override: None,
             thumbnail: None,
             thumb_tx,
             thumb_rx,
             history: History::load(),
+            history_search: String::new(),
             shown_view: View::Home,
             view_changed_at: Instant::now(),
             hidden: in_tray,
@@ -668,10 +678,7 @@ impl SnagApp {
                 for entry in &picked {
                     match &entry.url {
                         Some(link) => {
-                            let overrides = JobOverrides {
-                                height: self.height_override,
-                                ..Default::default()
-                            };
+                            let overrides = self.overrides();
                             let mut job =
                                 Job::new(link.clone(), self.mode, overrides, self.shape());
                             // The listing already knows the title; no sense
@@ -686,8 +693,7 @@ impl SnagApp {
                 if !by_position.is_empty() {
                     let overrides = JobOverrides {
                         playlist_items: Some(crate::jobs::playlist_items_spec(&by_position)),
-                        height: self.height_override,
-                        ..Default::default()
+                        ..self.overrides()
                     };
                     self.jobs
                         .push(Job::new(url, self.mode, overrides, self.shape()));
@@ -697,8 +703,7 @@ impl SnagApp {
             }
             let overrides = JobOverrides {
                 whole_playlist: self.playlist_choice == PlaylistChoice::All,
-                playlist_items: None,
-                height: self.height_override,
+                ..self.overrides()
             };
             self.jobs
                 .push(Job::new(url, self.mode, overrides, self.shape()));
@@ -712,6 +717,8 @@ impl SnagApp {
             self.playlist_choice = PlaylistChoice::One;
             self.playlist_picks.clear();
             self.height_override = None;
+            self.container_override = None;
+            self.audio_format_override = None;
             self.toast(
                 if queued == 1 {
                     "queued 1 download".to_string()
@@ -1723,6 +1730,16 @@ impl SnagApp {
         self.toast("saved these settings as a preset", false);
     }
 
+    /// What has been chosen on the save screen for the next download only.
+    fn overrides(&self) -> JobOverrides {
+        JobOverrides {
+            height: self.height_override,
+            container: self.container_override,
+            audio_format: self.audio_format_override,
+            ..Default::default()
+        }
+    }
+
     /// Queue one link with the current mode, as the tray and the clipboard
     /// watcher do when nobody is looking at the window. False when it was
     /// already in the queue.
@@ -1730,10 +1747,7 @@ impl SnagApp {
         if self.jobs.iter().any(|j| j.url == url) {
             return false;
         }
-        let overrides = JobOverrides {
-            height: self.height_override,
-            ..Default::default()
-        };
+        let overrides = self.overrides();
         self.jobs
             .push(Job::new(url, self.mode, overrides, self.shape()));
         let short = if self.mode == Mode::Audio {

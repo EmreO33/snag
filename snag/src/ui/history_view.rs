@@ -60,13 +60,63 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
         return;
     }
 
+    // --- search ------------------------------------------------------------
+    // Five hundred downloads is a lot of scrolling to find last week's one.
+    let width = ui.available_width();
+    let r = super::text_field(
+        ui,
+        &p,
+        &mut app.history_search,
+        "search by title, link or file name",
+        width,
+    );
+    if r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        app.history_search.clear();
+    }
+    ui.add_space(10.0);
+
+    let query = app.history_search.trim().to_string();
+    // Indexes into the whole history, so "forget" removes the right one
+    // whatever is filtered out around it.
+    let shown: Vec<usize> = app
+        .history
+        .entries
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e.matches(&query))
+        .map(|(i, _)| i)
+        .collect();
+
+    if !query.is_empty() {
+        let total = app.history.entries.len();
+        let said = match shown.len() {
+            0 => "nothing matches".to_string(),
+            n => format!("{n} of {total}"),
+        };
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(said).size(12.0).color(p.dim));
+            if ui
+                .add(
+                    egui::Label::new(egui::RichText::new("clear").size(12.0).color(p.accent))
+                        .sense(egui::Sense::click()),
+                )
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .clicked()
+            {
+                app.history_search.clear();
+            }
+        });
+        ui.add_space(6.0);
+    }
+
     let mut actions: Vec<Action> = Vec::new();
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .id_salt("history_scroll")
         .show(ui, |ui| {
-            for (i, entry) in app.history.entries.iter().enumerate() {
+            for i in shown {
+                let entry = &app.history.entries[i];
                 theme::card(ui, &p, |ui| {
                     ui.horizontal(|ui| {
                         let name: String = entry.display_name().chars().take(66).collect();

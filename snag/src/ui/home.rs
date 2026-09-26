@@ -155,6 +155,9 @@ fn page(app: &mut SnagApp, ui: &mut egui::Ui) {
                         .color(p.faint),
                 );
 
+                // --- what file it becomes ---------------------------------
+                format_row(app, ui, &p);
+
                 // --- presets ----------------------------------------------
                 presets(app, ui, &p);
 
@@ -430,6 +433,98 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
             });
         }
     });
+}
+
+/// The file type for the next download, picked here rather than in the
+/// settings, so an mp3 today does not mean changing what every download is.
+///
+/// Shown before a link is checked, because the format depends on nothing the
+/// site says: every site's video can be put in any of these containers, and
+/// every site's audio converted to any of these formats.
+fn format_row(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
+    use crate::settings::{AudioFormat, Container};
+
+    ui.add_space(8.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        theme::row_label(ui, p, "format");
+
+        // "from settings" says what that is, so nobody has to go and look.
+        if app.mode == Mode::Audio {
+            let from = app.settings.audio.format.label();
+            let mut chosen = app.audio_format_override;
+            if theme::pill(
+                ui,
+                p,
+                &format!("from settings ({from})"),
+                chosen.is_none(),
+                true,
+            )
+            .clicked()
+            {
+                chosen = None;
+            }
+            for f in AudioFormat::ALL {
+                if theme::pill(ui, p, f.label(), chosen == Some(*f), true)
+                    .on_hover_text(audio_hint(*f))
+                    .clicked()
+                {
+                    chosen = Some(*f);
+                }
+            }
+            app.audio_format_override = chosen;
+        } else {
+            let v = &app.settings.video;
+            let from = v.container.resolve(v.container.fitting_codec(v.codec));
+            let mut chosen = app.container_override;
+            if theme::pill(
+                ui,
+                p,
+                &format!("from settings ({from})"),
+                chosen.is_none(),
+                true,
+            )
+            .clicked()
+            {
+                chosen = None;
+            }
+            for c in Container::ALL.iter().filter(|c| **c != Container::Auto) {
+                if theme::pill(ui, p, c.label(), chosen == Some(*c), true)
+                    .on_hover_text(container_hint(*c))
+                    .clicked()
+                {
+                    chosen = Some(*c);
+                }
+            }
+            app.container_override = chosen;
+        }
+    });
+}
+
+fn container_hint(c: crate::settings::Container) -> &'static str {
+    use crate::settings::Container;
+    match c {
+        Container::Mp4 => "plays everywhere: phones, editors, every browser",
+        Container::Webm => {
+            "open format, plays in browsers. downloads vp9 or av1, and cannot carry a thumbnail"
+        }
+        Container::Mkv => "holds anything, best for keeping every track. not every editor opens it",
+        Container::Mov => "for apple devices and final cut. downloads h264",
+        Container::Auto => "",
+    }
+}
+
+fn audio_hint(f: crate::settings::AudioFormat) -> &'static str {
+    use crate::settings::AudioFormat;
+    match f {
+        AudioFormat::Best => "whatever the site has, kept as it is. no conversion, no quality loss",
+        AudioFormat::Mp3 => "plays on anything ever made",
+        AudioFormat::M4a => "aac, what apple devices and most phones prefer",
+        AudioFormat::Ogg => "vorbis, open and small",
+        AudioFormat::Opus => "the best quality for the size, not every player has it",
+        AudioFormat::Flac => "lossless, so a large file. it keeps what the site sent, it cannot add back what the site took out",
+        AudioFormat::Wav => "uncompressed, for editing. very large, and cannot carry a thumbnail",
+    }
 }
 
 /// The saved shapes, and the button that saves another one.

@@ -139,6 +139,12 @@ override the quality for one download without touching your settings.
 | `audio` | audio track only, converted to your chosen format |
 | `mute` | video only, audio track dropped |
 
+Under the mode buttons, **format** picks the file type for the next download
+without changing your settings: mp4, webm, mkv or mov for video, and best,
+mp3, m4a, ogg, opus, flac or wav for audio. webm only holds vp9 and av1, and
+mov only h264, so choosing one of those downloads a codec it can hold rather
+than failing at the end.
+
 Paste several links at once (one per line) and they all queue up. Paste a
 **playlist** and Snag lists what it holds and asks whether you want just the
 one you linked, all of them, or a pick: tick the items you want and each one
@@ -209,7 +215,8 @@ alternative anywhere is an exported `cookies.txt`, which Snag takes in
 preference to a browser profile.
 
 **history** &mdash; every finished download, remembered across restarts. Open the
-file, show it in its folder, download it again, or copy the link back out. Says
+file, show it in its folder, download it again, or copy the link back out. A
+search box finds a download by any words from its title, link or file name. Says
 plainly when a file has been moved or deleted rather than offering a button
 that would fail.
 
@@ -239,9 +246,10 @@ the release's published `SHA256SUMS.txt` and thrown away on a mismatch.
 ## Settings
 
 - **appearance** &mdash; dark / dim / light, six accents, interface scale, compact queue
-- **video** &mdash; quality up to 8k, codec (h264+aac / av1+opus / vp9+opus), container,
+- **video** &mdash; quality up to 8k, codec (h264+aac / av1+opus / vp9+opus), container
+  (mp4 / webm / mkv / mov),
   h265 toggle, prefer free formats, frame rate cap
-- **audio** &mdash; format (best / mp3 / ogg / wav / opus), bitrate, prefer better
+- **audio** &mdash; format (best / mp3 / m4a / ogg / opus / flac / wav), bitrate, prefer better
   quality, loudness normalisation, preferred dub language
 - **metadata** &mdash; embed metadata, thumbnail, chapters and subtitles; save the
   thumbnail separately; SponsorBlock removal; keep the original upload date

@@ -299,7 +299,7 @@ fn video(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
     theme::note_text(
         ui,
         &p,
-        "when auto is selected, snag picks the best container for the codec: mp4 for h264, webm for vp9/av1.",
+        "when auto is selected, snag picks the best container for the codec: mp4 for h264, webm for vp9/av1. webm only holds vp9/av1 and mov only h264, so picking one of those downloads a codec it can hold. the format can also be picked per download on the save screen.",
     );
 
     theme::section_title(ui, &p, "high efficiency video codec");

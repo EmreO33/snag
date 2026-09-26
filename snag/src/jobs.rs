@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
-use crate::settings::{Mode, Preset, Settings};
+use crate::settings::{AudioFormat, Container, Mode, Preset, Settings};
 use crate::util;
 use crate::ytdlp;
 
@@ -119,6 +119,21 @@ pub struct JobOverrides {
     pub playlist_items: Option<String>,
     /// Cap this download at a specific height, whatever the settings say.
     pub height: Option<u32>,
+    /// Save this download in this container, whatever the settings say.
+    pub container: Option<Container>,
+    /// Convert this download's audio to this, whatever the settings say.
+    pub audio_format: Option<AudioFormat>,
+}
+
+impl JobOverrides {
+    /// The format this download was told to take, when it differs from the
+    /// settings, for the queue to show.
+    pub fn format_label(&self, mode: Mode) -> Option<&'static str> {
+        match mode {
+            Mode::Audio => self.audio_format.map(|f| f.label()),
+            _ => self.container.map(|c| c.label()),
+        }
+    }
 }
 
 /// Write picked positions the way `--playlist-items` reads them, with runs
