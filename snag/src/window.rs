@@ -196,6 +196,7 @@ mod imp {
             if window != 0 {
                 unsafe {
                     taskbar(window, false);
+                    transitions(window, false);
                     // Minimised and not activated: it never takes focus from
                     // whatever the user is doing, which matters most when
                     // this is running at login.
@@ -218,9 +219,37 @@ mod imp {
             // Button first, then the window, so nothing is seen flying down
             // to a taskbar slot that is about to disappear.
             taskbar(window, false);
+            // And no minimise animation at all: closing to the tray should
+            // look like closing, the window simply gone, the way Discord
+            // does it. It is still really a minimise underneath, because a
+            // hidden window gets no redraws and Snag runs from redraws.
+            transitions(window, false);
             ShowWindow(window, SW_MINIMIZE);
             IsIconic(window) != 0
         }
+    }
+
+    /// Turn Windows' minimise and restore animations off or on for this
+    /// window alone. Off only across a trip to the tray and back: the
+    /// window's own minimise button keeps its usual animation.
+    unsafe fn transitions(window: isize, enabled: bool) {
+        #[link(name = "dwmapi")]
+        extern "system" {
+            fn DwmSetWindowAttribute(
+                window: isize,
+                attribute: u32,
+                value: *const std::ffi::c_void,
+                size: u32,
+            ) -> i32;
+        }
+        const DWMWA_TRANSITIONS_FORCEDISABLED: u32 = 3;
+        let disabled: i32 = if enabled { 0 } else { 1 };
+        DwmSetWindowAttribute(
+            window,
+            DWMWA_TRANSITIONS_FORCEDISABLED,
+            &disabled as *const i32 as *const std::ffi::c_void,
+            std::mem::size_of::<i32>() as u32,
+        );
     }
 
     /// Add or remove this window's taskbar button, through the shell's own
@@ -303,8 +332,12 @@ mod imp {
             // The button comes back before the window does, so it is there
             // to be clicked the moment the window is.
             taskbar(window, true);
+            // Straight back where it was, rather than rising out of the
+            // corner of the screen where a taskbar button would have been.
+            transitions(window, false);
             ShowWindow(window, SW_SHOW);
             ShowWindow(window, SW_RESTORE);
+            transitions(window, true);
             // Windows often refuses this from a background thread, which is
             // fine: the window is back, it just may not be given focus.
             SetForegroundWindow(window);
