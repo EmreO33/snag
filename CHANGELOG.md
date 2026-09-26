@@ -8,6 +8,14 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.8
+
+- A machine-wide install no longer gets a second "Snag" in the Start menu.
+  Snag keeps a Start menu shortcut because Windows will not show its
+  notifications without one, but it only looked in the user's own Start
+  menu, missed the installer's in the all-users one, and made another. The
+  installer's now counts, and the extra one is removed.
+
 ## 1.5.7
 
 - **The tray menu works on the first click.** With Snag sitting in the

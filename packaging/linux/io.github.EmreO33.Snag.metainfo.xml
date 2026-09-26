@@ -96,6 +96,12 @@
   </keywords>
 
   <releases>
+    <release version="1.5.8" date="2026-09-26">
+      <description>
+        <p>A Windows fix: no duplicate Start menu entry for a machine-wide
+          install.</p>
+      </description>
+    </release>
     <release version="1.5.7" date="2026-09-26">
       <description>
         <p>The tray menu works on the first click, and closing to the tray
