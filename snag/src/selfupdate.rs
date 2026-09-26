@@ -4,8 +4,8 @@
 //! A copy managed by Scoop must be left alone and updated through Scoop, or the
 //! two fight over the same files. An installed copy is best handed back to its
 //! own installer. A Linux package belongs to the package manager that put it
-//! there: a .deb or .rpm update is downloaded and handed over with the one
-//! command that installs it, and the AUR, Flathub and the Snap Store update
+//! there: a .deb, .rpm or Flatpak update is downloaded and handed over with
+//! the one command that installs it, and the AUR and the Snap Store update
 //! their own copies. Only a portable or loose binary is ours to replace
 //! directly.
 
@@ -35,7 +35,8 @@ pub enum InstallKind {
     Rpm,
     /// Installed from the AUR: pacman owns it, and the AUR helper updates it.
     Aur,
-    /// Installed from Flathub, which updates it.
+    /// A Flatpak, from the bundle on the releases page: an update is the
+    /// next bundle, downloaded and handed to flatpak.
     Flatpak,
     /// Installed from the Snap Store, which updates it.
     Snap,
@@ -52,7 +53,7 @@ impl InstallKind {
             InstallKind::Deb => "installed from the .deb package",
             InstallKind::Rpm => "installed from the .rpm package",
             InstallKind::Aur => "installed from the aur",
-            InstallKind::Flatpak => "installed from flathub",
+            InstallKind::Flatpak => "installed as a flatpak",
             InstallKind::Snap => "installed from the snap store",
             InstallKind::Portable => "portable or standalone binary",
         }
@@ -67,7 +68,7 @@ impl InstallKind {
             InstallKind::Deb => "the package manager owns this copy, so snag does not replace it. an update downloads the new .deb to your downloads folder and gives you the one command that installs it.",
             InstallKind::Rpm => "the package manager owns this copy, so snag does not replace it. an update downloads the new .rpm to your downloads folder and gives you the one command that installs it.",
             InstallKind::Aur => "pacman owns this copy, so it updates with the rest of the system, through your aur helper.",
-            InstallKind::Flatpak => "flathub updates this copy along with your other flatpaks, from your software centre or with flatpak update.",
+            InstallKind::Flatpak => "flatpak owns this copy, so snag does not replace it. an update downloads the new bundle to your downloads folder and gives you the one command that installs it.",
             InstallKind::Snap => "snaps update themselves in the background. to get it right away, refresh it by hand.",
             InstallKind::Portable => "this copy replaces its own binary in place. the previous one is kept alongside until the next launch.",
         }
@@ -81,7 +82,6 @@ impl InstallKind {
         match self {
             InstallKind::Scoop => Some("scoop update snag"),
             InstallKind::Aur => Some("yay -Syu"),
-            InstallKind::Flatpak => Some("flatpak update io.github.EmreO33.Snag"),
             InstallKind::Snap => Some("sudo snap refresh snag"),
             _ => None,
         }
@@ -154,6 +154,7 @@ fn package_install_command(kind: InstallKind, file: &Path) -> String {
     let file = file.display();
     match kind {
         InstallKind::Deb => format!("sudo apt install \"{file}\""),
+        InstallKind::Flatpak => format!("flatpak install --user \"{file}\""),
         _ if crate::util::run_capture("dnf", &["--version"]).is_ok() => {
             format!("sudo dnf install \"{file}\"")
         }
@@ -482,6 +483,7 @@ pub fn install(
             InstallKind::AppImage => format!("Snag-{version}-x86_64.AppImage"),
             InstallKind::Deb => format!("snag_{version}_amd64.deb"),
             InstallKind::Rpm => format!("snag-{version}-1.x86_64.rpm"),
+            InstallKind::Flatpak => format!("Snag-{version}-x86_64.flatpak"),
             _ => binary_asset_name().to_string(),
         };
         let url = asset_url(&version, &asset);
@@ -539,7 +541,7 @@ pub fn install(
                 },
                 None => SelfUpdateState::Error("could not find this appimage on disk".into()),
             },
-            InstallKind::Deb | InstallKind::Rpm => {
+            InstallKind::Deb | InstallKind::Rpm | InstallKind::Flatpak => {
                 // Somewhere the user will find it again, rather than a temp
                 // folder that is gone after a reboot.
                 let dir = crate::util::default_download_dir();
@@ -553,7 +555,7 @@ pub fn install(
                 }
             }
             // Updated by whatever installed them; the button is not offered.
-            InstallKind::Scoop | InstallKind::Aur | InstallKind::Flatpak | InstallKind::Snap => {
+            InstallKind::Scoop | InstallKind::Aur | InstallKind::Snap => {
                 SelfUpdateState::Error("this copy is updated by the package manager".into())
             }
             _ => match replace_self(&bytes) {

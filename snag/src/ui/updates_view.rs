@@ -77,7 +77,7 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                         let available =
                             matches!(app.app_update_state, SelfUpdateState::Available { .. });
 
-                        // A copy that Scoop, the AUR, Flathub or the Snap Store
+                        // A copy that Scoop, the AUR or the Snap Store
                         // owns must be updated through them, or the two end up
                         // fighting over the same files.
                         if let Some(command) = app.install_kind.managed_command() {

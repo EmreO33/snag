@@ -1,16 +1,16 @@
-# The Flatpak, as Flathub builds it. The copy Flathub builds from lives in
-# the flathub/io.github.EmreO33.Snag repository; this one is its source, and
-# the release workflow's flatpak job builds it to prove it still does.
+# The Flatpak. The release workflow builds it into the .flatpak bundle on
+# every release page, from this checkout.
 #
-# Snag is built from source, offline, from the crates listed in
-# cargo-sources.json. Regenerate that whenever Cargo.lock changes:
+# Snag is built from source, offline (as Flatpak builds are), from the
+# crates listed in cargo-sources.json. Regenerate that whenever Cargo.lock
+# changes:
 #
 #   python3 flatpak-cargo-generator.py snag/Cargo.lock -o packaging/flatpak/cargo-sources.json
 #
 # (from github.com/flatpak/flatpak-builder-tools, cargo/).
 #
 # ffmpeg, yt-dlp and deno come as the projects' own release builds, the way
-# other yt-dlp front ends on Flathub ship them. Snag still keeps yt-dlp
+# other yt-dlp front ends on Flatpak ship them. Snag still keeps yt-dlp
 # current by itself: when the bundled copy falls behind, "update now" puts a
 # fresh one in Snag's own folder, which it prefers from then on.
 app-id: io.github.EmreO33.Snag

@@ -84,7 +84,7 @@ Everything is built on Ubuntu 22.04, so it runs on glibc 2.35 or newer: Ubuntu
 22.04, Debian 12, Fedora 36, openSUSE Leap 15.5 and anything since. Tested on
 Ubuntu 26.04, Fedora 44, openSUSE Tumbleweed and Arch.
 
-Flathub, the Snap Store and the AUR are on the way.
+The Snap Store and the AUR are on the way.
 
 A copy from a package updates the way that package does: Snag downloads the
 new .deb or .rpm and hands you the one command that installs it, and leaves a
