@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: EmreO33.Snag
-PackageVersion: 1.3.5
+PackageVersion: 1.5.10
 PackageLocale: en-US
 Publisher: EmreO33
 PublisherUrl: https://github.com/EmreO33
@@ -24,7 +24,8 @@ Description: |-
 
   Snag does not ship yt-dlp. On first launch it offers to download the current
   release from the yt-dlp project's own GitHub releases, and keeps it updated for
-  you. ffmpeg is required separately and is not installed by Snag.
+  you. It also finds ffmpeg, which merging and converting need, or installs it
+  for you through winget (Gyan.FFmpeg).
 Moniker: snag
 Tags:
   - download
@@ -34,6 +35,6 @@ Tags:
   - video
   - youtube
   - yt-dlp
-ReleaseNotesUrl: https://github.com/EmreO33/snag/releases/tag/v1.3.5
+ReleaseNotesUrl: https://github.com/EmreO33/snag/releases/tag/v1.5.10
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
