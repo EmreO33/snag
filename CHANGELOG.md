@@ -8,6 +8,14 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.10
+
+- **`snag --version` prints on Windows.** Snag is a window app on Windows,
+  and Windows starts those with no console, so `--version`,
+  `--print-command` and `--install-ytdlp` printed into nothing when run
+  from a terminal. They now write to the terminal they were started from.
+  Opening Snag normally is unchanged.
+
 ## 1.5.9
 
 - **Background mode on Linux.** Snag gets a tray icon on Linux too, with

@@ -210,7 +210,45 @@ fn starting_in_tray(settings: &settings::Settings) -> bool {
     app::launched_into_tray(settings) && window::can_hide()
 }
 
+/// Give Snag the terminal it was started from, for the command-line modes.
+///
+/// A release build on Windows is a window app, which Windows starts with no
+/// console at all, so everything those modes printed went nowhere and
+/// `snag --version` looked like it did nothing. Attaching to the parent's
+/// console, when there is one, is what makes the output show up. A normal
+/// launch is left alone, so no console window ever appears beside Snag.
+fn attach_console() {
+    #[cfg(windows)]
+    {
+        // The arguments that make Snag a command-line tool, not a window.
+        const CONSOLE_ARGS: [&str; 5] = [
+            "--version",
+            "-V",
+            "--print-command",
+            "--install-ytdlp",
+            "--notify-test",
+        ];
+        if !std::env::args()
+            .skip(1)
+            .any(|a| CONSOLE_ARGS.contains(&a.as_str()))
+        {
+            return;
+        }
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn AttachConsole(process: u32) -> i32;
+        }
+        const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+        // Fails harmlessly when there is no parent console, or when the
+        // output is already going somewhere (a pipe or a file).
+        unsafe {
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+    }
+}
+
 fn main() -> eframe::Result<()> {
+    attach_console();
     if version_and_exit()
         || print_command_and_exit()
         || install_ytdlp_and_exit()
