@@ -54,6 +54,10 @@ cleanup:
 modules:
   # The shared build: ffmpeg and ffprobe share one set of libraries rather
   # than carrying 165 MB each.
+  #
+  # Always a month-end build. BtbN deletes daily autobuilds after a couple
+  # of weeks but keeps each month's last one for about two years, and a
+  # pinned daily build had already vanished by the next release.
   - name: ffmpeg
     buildsystem: simple
     build-commands:
@@ -61,8 +65,8 @@ modules:
       - mkdir -p /app/lib && cp -a lib/*.so* /app/lib/
     sources:
       - type: archive
-        url: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-25-15-37/ffmpeg-n9.0.2-8-gb135b25c19-linux64-gpl-shared-9.0.tar.xz
-        sha256: 2ff1b2fce7673d67334481e7b662e8e09322533e5ea59c45b11c530433cf5e0b
+        url: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n9.0.2-17-g2a571b6068-linux64-gpl-shared-9.0.tar.xz
+        sha256: 01a9764d0b5364b66cfeb4617557c64321b0e232e172ec73f0a701c5f7694326
         only-arches:
           - x86_64
 
