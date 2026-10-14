@@ -249,6 +249,8 @@ fn attach_console() {
 
 fn main() -> eframe::Result<()> {
     attach_console();
+    // Before any window exists, so the taskbar files Snag's under its pin.
+    notify::claim_app_id();
     if version_and_exit()
         || print_command_and_exit()
         || install_ytdlp_and_exit()

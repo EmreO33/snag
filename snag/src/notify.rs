@@ -57,6 +57,20 @@ pub fn register() {
     imp::register();
 }
 
+/// Tell Windows which app this process is, before it opens any window.
+///
+/// The taskbar puts a window under the button whose app id matches, and the
+/// pinned Snag (a Start menu shortcut, stamped by the installer or by
+/// `register`) carries `APP_ID`. A window has to be made under that id: one
+/// that exists before the id is set keeps the exe's path as its identity, so a
+/// pinned Snag opened a second, unpinned button beside itself. This used to be
+/// set by `register`, on a thread started after the window was up, and not at
+/// all with notifications off. Elsewhere it does nothing.
+pub fn claim_app_id() {
+    #[cfg(windows)]
+    imp::claim_app_id();
+}
+
 /// Take the introduction back out, for someone who has turned notifications
 /// off and would rather not leave a trace of them. Only what Snag made for
 /// itself is removed; a shortcut the installer or Scoop created is theirs.
@@ -93,11 +107,12 @@ mod imp {
         shortcut::programs_dir().map(|d| d.join("Snag.lnk"))
     }
 
-    pub fn register() {
-        // The process side, so the taskbar groups this window under the
-        // same id the shortcut and the toast use. Harmless if it fails.
+    pub fn claim_app_id() {
+        // Harmless if it fails: the taskbar falls back to the exe's path.
         unsafe { SetCurrentProcessExplicitAppUserModelID(wide(APP_ID).as_ptr()) };
+    }
 
+    pub fn register() {
         let Ok(exe) = std::env::current_exe() else {
             return;
         };

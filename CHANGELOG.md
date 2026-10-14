@@ -8,6 +8,14 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.11
+
+- **Snag opens under its pinned taskbar icon** on Windows, rather than as
+  a second Snag beside it. Windows matches a window to a pinned icon by
+  the app's id, which Snag only claimed once notifications had been set up,
+  after its window already existed, and not at all with notifications off.
+  It now claims it first thing.
+
 ## 1.5.10
 
 - **`snag --version` prints on Windows.** Snag is a window app on Windows,

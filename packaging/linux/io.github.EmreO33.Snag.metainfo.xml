@@ -96,6 +96,11 @@
   </keywords>
 
   <releases>
+    <release version="1.5.11" date="2026-10-14">
+      <description>
+        <p>A Windows fix: Snag opens under its pinned taskbar icon.</p>
+      </description>
+    </release>
     <release version="1.5.10" date="2026-10-03">
       <description>
         <p>Command-line options such as --version print their output on
