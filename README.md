@@ -259,6 +259,10 @@ Snag's look is **heavily inspired by [cobalt.tools](https://cobalt.tools)**: the
 
 The downloading is done by [yt-dlp](https://github.com/yt-dlp/yt-dlp) and the media work by [ffmpeg](https://ffmpeg.org), both separate projects that Snag runs as programs.
 
+## Privacy
+
+Snag has no accounts, telemetry or analytics, and sends nothing to its developer. What it keeps (settings, download history, the unfinished queue) stays on your computer. The [privacy policy](PRIVACY.md) has the details.
+
 ## Licence
 
 Free software under the **GNU General Public License, version 3 or later** ([LICENSE](LICENSE)). Use it, study it, change it and share it; a modified version you distribute stays under the same licence, with its source. No warranty.
