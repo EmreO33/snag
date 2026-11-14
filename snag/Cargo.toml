@@ -20,8 +20,9 @@ arboard = "3"
 ureq = { version = "2", features = ["json", "tls"] }
 png = "0.17"
 # Deno arrives from its releases as a zip holding one binary. Deflate is the
-# only method those zips use.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+# only method those zips use, and reading is all Snag does, so only the
+# decompressor (no zopfli compressor).
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # Thumbnails come back as jpeg or webp. The crate is already in the tree via
 # eframe and arboard, so this only adds the two decoders.

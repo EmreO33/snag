@@ -63,9 +63,26 @@ jobs:
           curl -fsSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
           python3 flatpak-cargo-generator.py snag/Cargo.lock -o /tmp/cargo-sources.json
           if ! diff -q /tmp/cargo-sources.json packaging/flatpak/cargo-sources.json; then
-            echo "::error::packaging/flatpak/cargo-sources.json is stale: regenerate it from Cargo.lock"
+            echo "::error::packaging/flatpak/cargo-sources.json is stale: regenerate it from Cargo.lock, or take the up-to-date one from this run's cargo-sources artifact"
             exit 1
           fi
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cargo-sources
+          path: /tmp/cargo-sources.json
+          if-no-files-found: ignore
+
+      # Known vulnerabilities in the crates Snag is built from, from the
+      # RustSec database. Advisories that cannot reach Snag are listed, with
+      # the reason, in snag/.cargo/audit.toml.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: no known vulnerabilities in the dependencies
+        working-directory: snag
+        run: cargo audit
 
   check:
     name: ${{ matrix.os }}
