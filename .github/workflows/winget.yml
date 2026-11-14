@@ -1,0 +1,23 @@
+name: winget
+
+# Open the winget-pkgs pull request for a release that is already published.
+# The release workflow does this by itself for new releases; this is for one
+# that went out before WINGET_TOKEN existed, or whose pull request needs
+# opening again.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag to submit to winget, e.g. v1.5.11"
+        required: true
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: EmreO33.Snag
+          installers-regex: 'windows-setup\.exe$'
+          release-tag: ${{ inputs.tag }}
+          token: ${{ secrets.WINGET_TOKEN }}
