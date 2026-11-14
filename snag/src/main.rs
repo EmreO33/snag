@@ -10,6 +10,7 @@ mod icon;
 mod installer;
 mod jobs;
 mod motion;
+mod net;
 mod notify;
 mod probe;
 mod remux;
@@ -100,6 +101,7 @@ fn install_ytdlp_and_exit() -> bool {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(bootstrap::managed_bin_dir);
 
+    net::set_proxy(&settings::Settings::load().0.network.proxy);
     println!("installing into {}", dir.display());
     let (tx, rx) = std::sync::mpsc::channel();
     installer::install(dir, tx, || {});
@@ -203,9 +205,7 @@ fn startup_view() -> Option<app::View> {
 /// passes, and so does the setting.
 ///
 /// Asked before the window is built, because a window that is going to the
-/// tray should never be drawn at all. The settings are read again by the app
-/// itself a moment later; reading them twice costs a few milliseconds and
-/// saves a window appearing and vanishing.
+/// tray should never be drawn at all.
 fn starting_in_tray(settings: &settings::Settings) -> bool {
     app::launched_into_tray(settings) && window::can_hide()
 }
@@ -263,7 +263,12 @@ fn main() -> eframe::Result<()> {
     // deleted once it is no longer the running process.
     selfupdate::clean_stale_binary();
 
-    let settings = settings::Settings::load().0;
+    // Read once, here, and handed to the app. Reading them again in the app
+    // used to lose a corrupt file's warning: the first read set the broken
+    // file aside, the second found nothing, and Snag quietly started first-run
+    // setup over again.
+    let (settings, load_warning) = settings::Settings::load();
+    net::set_proxy(&settings.network.proxy);
 
     // On Linux, X11 when Snag may need to hide in the tray, since a Wayland
     // window cannot be hidden. Decided first: it is what can_hide answers.
@@ -305,7 +310,7 @@ fn main() -> eframe::Result<()> {
         "Snag",
         options,
         Box::new(move |cc| {
-            let mut app = app::SnagApp::new(cc);
+            let mut app = app::SnagApp::new(cc, settings, load_warning);
             // Before the link is queued, so the download is shaped by it.
             if let Some(name) = startup_preset() {
                 if !app.apply_preset_named(&name) {

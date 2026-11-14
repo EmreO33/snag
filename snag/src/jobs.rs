@@ -213,7 +213,7 @@ impl Job {
         self.cancel_flag.store(true, Ordering::Relaxed);
         if let Ok(mut guard) = self.child.lock() {
             if let Some(child) = guard.as_mut() {
-                let _ = child.kill();
+                util::kill_tree(child);
             }
         }
     }
@@ -239,7 +239,8 @@ pub fn spawn(
         let bin = settings.ytdlp_bin();
         let args = ytdlp::build_args(&url, mode, overrides, &settings);
 
-        let spawned = util::command(&bin)
+        let mut cmd = util::command(&bin);
+        let spawned = util::own_group(&mut cmd)
             .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -301,9 +302,16 @@ pub fn spawn(
                                 announced_title = true;
                             }
                         }
+                        // A redraw for the change of state only. Progress
+                        // lines come many times a second per download, and
+                        // the window already redraws five times a second
+                        // while anything is downloading, so waking it for
+                        // each one only burned CPU (and on Windows posted a
+                        // fake mouse move every time).
                         if last_state != JobState::Downloading {
                             last_state = JobState::Downloading;
                             let _ = tx.send(JobEvent::State(id, JobState::Downloading));
+                            repaint();
                         }
                         // yt-dlp reports `finished` once per stream, so pin the
                         // bar to full rather than leaving it a hair short.
@@ -319,7 +327,6 @@ pub fn spawn(
                             speed: if finished { Some(0.0) } else { p.speed },
                             eta: if finished { Some(-1.0) } else { p.eta },
                         });
-                        repaint();
                     }
                     ytdlp::Line::PostProcess { status } => {
                         if last_state != JobState::PostProcessing {
@@ -400,13 +407,28 @@ fn queue_path() -> PathBuf {
     Settings::config_dir().join("queue.json")
 }
 
+fn worth_saving(job: &Job) -> bool {
+    !job.state.is_terminal() || job.state.is_resumable()
+}
+
+/// What changes whenever the saved queue would: which jobs are in it, and
+/// their titles, which arrive after a job starts. Their links, modes and
+/// shapes are fixed when they are queued. Cheap enough for every frame,
+/// where building the queue itself meant copying every job's settings.
+pub fn save_fingerprint(jobs: &[Job]) -> Vec<(u64, usize)> {
+    jobs.iter()
+        .filter(|j| worth_saving(j))
+        .map(|j| (j.id, j.title.len()))
+        .collect()
+}
+
 /// The jobs worth writing down: the ones that had not finished.
 ///
 /// A download that is done is in history, and one that failed or was cancelled
 /// was answered already. What survives a restart is work still outstanding.
 pub fn to_save(jobs: &[Job]) -> Vec<Saved> {
     jobs.iter()
-        .filter(|j| !j.state.is_terminal() || j.state.is_resumable())
+        .filter(|j| worth_saving(j))
         .map(|j| Saved {
             url: j.url.clone(),
             mode: j.mode,
@@ -435,9 +457,8 @@ pub fn save_queue(saved: &[Saved]) -> Result<(), String> {
         }
         return Ok(());
     }
-    std::fs::create_dir_all(Settings::config_dir()).map_err(|e| e.to_string())?;
     let raw = serde_json::to_string_pretty(saved).map_err(|e| e.to_string())?;
-    std::fs::write(path, raw).map_err(|e| e.to_string())
+    util::write_atomic(&path, raw.as_bytes()).map_err(|e| e.to_string())
 }
 
 impl Job {

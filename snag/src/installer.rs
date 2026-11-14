@@ -90,17 +90,53 @@ pub enum InstallEvent {
     Log(String),
 }
 
-fn download_to(url: &str, dest: &Path, tx: &Sender<InstallEvent>) -> Result<(), String> {
-    let resp = ureq::get(url)
-        .set("User-Agent", "Snag")
-        .timeout(std::time::Duration::from_secs(60))
-        .call()
-        .map_err(|e| format!("could not reach github: {e}"))?;
+/// The SHA-256 a project published for `asset`, from the checksum file at
+/// `sums_url`.
+///
+/// yt-dlp publishes one file for every asset, a `hash  name` line each.
+/// Deno publishes one file per asset, and on Windows it is PowerShell's
+/// `Hash : HASH` layout with no name in it, so a file holding exactly one
+/// hash is taken to be this asset's.
+fn published_sha256(sums_url: &str, asset: &str) -> Result<String, String> {
+    let body = crate::net::get(sums_url)
+        .and_then(|r| r.into_string().map_err(|e| e.to_string()))
+        .map_err(|e| format!("could not fetch the checksums: {e}"))?;
+    sha256_for(&body, asset).ok_or_else(|| format!("the checksums list nothing for {asset}"))
+}
 
-    let total: u64 = resp
-        .header("Content-Length")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
+pub(crate) fn sha256_for(body: &str, asset: &str) -> Option<String> {
+    let is_hash = |w: &str| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit());
+    for line in body.lines() {
+        let mut words = line.split_whitespace();
+        if let (Some(hash), Some(name)) = (words.next(), words.next()) {
+            // `*name` is the binary-mode marker some sha256sum output uses.
+            if is_hash(hash) && name.trim_start_matches('*') == asset {
+                return Some(hash.to_ascii_lowercase());
+            }
+        }
+    }
+    let hashes: Vec<&str> = body
+        .split(|c: char| !c.is_ascii_hexdigit())
+        .filter(|w| is_hash(w))
+        .collect();
+    match hashes.as_slice() {
+        [only] => Some(only.to_ascii_lowercase()),
+        _ => None,
+    }
+}
+
+/// Download `url` to `dest`, refusing it unless its SHA-256 is `expected`.
+///
+/// What is downloaded here is run straight afterwards, to ask its version,
+/// so it is checked against its project's published checksum first.
+fn download_to(
+    url: &str,
+    dest: &Path,
+    expected: &str,
+    tx: &Sender<InstallEvent>,
+) -> Result<(), String> {
+    let resp = crate::net::download(url).map_err(|e| format!("could not reach github: {e}"))?;
+    let total = crate::net::declared_length(&resp);
 
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)
@@ -141,6 +177,17 @@ fn download_to(url: &str, dest: &Path, tx: &Sender<InstallEvent>) -> Result<(), 
         return Err("github returned an empty file".into());
     }
 
+    let bytes = std::fs::read(&temp).map_err(|e| e.to_string())?;
+    if crate::selfupdate::sha256_hex(&bytes) != expected {
+        let _ = std::fs::remove_file(&temp);
+        return Err(
+            "the download did not match its published checksum, so it was discarded".into(),
+        );
+    }
+    let _ = tx.send(InstallEvent::Log(
+        "checksum:    matches the published one".into(),
+    ));
+
     let _ = std::fs::remove_file(dest);
     std::fs::rename(&temp, dest)
         .map_err(|e| format!("could not move the binary into place: {e}"))?;
@@ -180,7 +227,12 @@ pub fn install_now(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
         }));
         repaint();
 
-        if let Err(e) = download_to(&download_url(), &dest, tx) {
+        let fetched = published_sha256(
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS",
+            asset_name(),
+        )
+        .and_then(|expected| download_to(&download_url(), &dest, &expected, tx));
+        if let Err(e) = fetched {
             let _ = tx.send(InstallEvent::State(InstallState::Failed(e)));
             repaint();
             return;
@@ -344,7 +396,11 @@ pub fn ensure_deno(dir: &Path, tx: &Sender<InstallEvent>) -> Result<String, Stri
     // Not "deno.zip.part": download_to makes its own temp name by swapping
     // the extension for .part, and that name must not collide with this one.
     let zip_path = dir.join("deno-download.zip");
-    download_to(&deno_download_url(), &zip_path, tx)?;
+    let expected = published_sha256(
+        &format!("{}.sha256sum", deno_download_url()),
+        deno_asset_name(),
+    )?;
+    download_to(&deno_download_url(), &zip_path, &expected, tx)?;
 
     let extracted = (|| -> Result<(), String> {
         let file = std::fs::File::open(&zip_path).map_err(|e| e.to_string())?;
@@ -690,6 +746,36 @@ pub fn detect_ffmpeg(configured: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::sha256_for;
+
+    #[test]
+    fn finds_the_published_hash_in_each_checksum_layout() {
+        let ytdlp = "e51e69e89489f199530f13d32a4342da3ddb2cf34842f364603a066db05afbf3  yt-dlp\n\
+                     f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d  yt-dlp.exe\n";
+        assert_eq!(
+            sha256_for(ytdlp, "yt-dlp.exe").as_deref(),
+            Some("f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d")
+        );
+        assert_eq!(
+            sha256_for(ytdlp, "yt-dlp_linux"),
+            None,
+            "never another asset's"
+        );
+
+        // Deno on Windows: PowerShell's Get-FileHash output, no name in it.
+        let powershell = "\r\nAlgorithm : SHA256\r\n\
+                          Hash      : CBA84B26E0DF5AE7F74FC66B86A95B866872A86292EBD8C1D9C3D4E5F6A7B8C9\r\n\
+                          Path      : C:\\a\\deno.zip\r\n";
+        assert_eq!(
+            sha256_for(powershell, "deno-x86_64-pc-windows-msvc.zip").as_deref(),
+            Some("cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd8c1d9c3d4e5f6a7b8c9")
+        );
+
+        // Deno on Linux: one sha256sum line.
+        let unix = "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609  deno-x86_64-unknown-linux-gnu.zip\n";
+        assert!(sha256_for(unix, "deno-x86_64-unknown-linux-gnu.zip").is_some());
+    }
+
     #[test]
     fn what_is_configured_is_tried_before_anything_else() {
         let list = super::ffmpeg_candidates("  C:/tools/ffmpeg.exe  ");

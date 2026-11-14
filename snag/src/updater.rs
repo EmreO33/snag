@@ -52,14 +52,8 @@ pub fn current_version(bin: &str) -> Result<String, String> {
 }
 
 fn latest_version() -> Result<String, String> {
-    let resp = ureq::get(LATEST_RELEASE_API)
-        .set("User-Agent", "Snag")
-        .set("Accept", "application/vnd.github+json")
-        // Generous for a check nobody is waiting on: a slow network or a
-        // vpn can take most of 15s just to connect.
-        .timeout(std::time::Duration::from_secs(30))
-        .call()
-        .map_err(|e| format!("could not reach github: {e}"))?;
+    let resp =
+        crate::net::get(LATEST_RELEASE_API).map_err(|e| format!("could not reach github: {e}"))?;
 
     let json: serde_json::Value = resp
         .into_json()

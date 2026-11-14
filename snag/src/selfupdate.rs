@@ -243,14 +243,8 @@ pub enum SelfUpdateEvent {
 
 /// Ask GitHub for the newest release tag.
 fn latest_version() -> Result<String, String> {
-    let resp = ureq::get(LATEST_RELEASE_API)
-        .set("User-Agent", "Snag")
-        .set("Accept", "application/vnd.github+json")
-        // Generous for a check nobody is waiting on: a slow network or a
-        // vpn can take most of 15s just to connect.
-        .timeout(std::time::Duration::from_secs(30))
-        .call()
-        .map_err(|e| format!("could not reach github: {e}"))?;
+    let resp =
+        crate::net::get(LATEST_RELEASE_API).map_err(|e| format!("could not reach github: {e}"))?;
 
     let json: serde_json::Value = resp
         .into_json()
@@ -266,21 +260,14 @@ fn asset_url(version: &str, asset: &str) -> String {
     format!("https://github.com/{REPO}/releases/download/v{version}/{asset}")
 }
 
-/// Fetch the release's checksum file, if it published one.
+/// The published SHA-256 of `asset`, from the release's checksum file.
 fn published_hash(version: &str, asset: &str) -> Option<String> {
-    let resp = ureq::get(&asset_url(version, "SHA256SUMS.txt"))
-        .set("User-Agent", "Snag")
-        .timeout(std::time::Duration::from_secs(15))
-        .call()
-        .ok()?;
+    let resp = crate::net::get(&asset_url(version, "SHA256SUMS.txt")).ok()?;
     let body = resp.into_string().ok()?;
-    body.lines()
-        .find(|l| l.trim_end().ends_with(asset))
-        .and_then(|l| l.split_whitespace().next())
-        .map(|h| h.to_lowercase())
+    crate::installer::sha256_for(&body, asset)
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     // A small, self-contained SHA-256 so updating does not pull in a crypto
     // dependency for one hash.
     const K: [u32; 64] = [
@@ -354,19 +341,12 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 /// Download a release asset into memory, reporting progress as it goes.
 fn download(url: &str, tx: &Sender<SelfUpdateEvent>) -> Result<Vec<u8>, String> {
-    let resp = ureq::get(url)
-        .set("User-Agent", "Snag")
-        .timeout(std::time::Duration::from_secs(120))
-        .call()
-        .map_err(|e| format!("could not download the update: {e}"))?;
-
-    let total: u64 = resp
-        .header("Content-Length")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
+    let resp =
+        crate::net::download(url).map_err(|e| format!("could not download the update: {e}"))?;
+    let total = crate::net::declared_length(&resp);
 
     let mut reader = resp.into_reader();
-    let mut out: Vec<u8> = Vec::with_capacity(total as usize);
+    let mut out: Vec<u8> = Vec::with_capacity(total.min(crate::net::MAX_RESERVE) as usize);
     let mut buf = vec![0u8; 64 * 1024];
     loop {
         let n = reader
@@ -498,7 +478,7 @@ pub fn install(
             }
         };
 
-        // Verify against the release's own checksum file when it has one.
+        // Verify against the release's own checksum file.
         match published_hash(&version, &asset) {
             Some(expected) => {
                 let actual = sha256_hex(&bytes);
@@ -513,10 +493,15 @@ pub fn install(
                 let _ = tx.send(SelfUpdateEvent::Log("checksum verified".into()));
             }
             None => {
-                let _ = tx.send(SelfUpdateEvent::Log(
-                    "this release published no checksums, so the download could not be verified"
+                // Every release publishes SHA256SUMS.txt, so not getting it
+                // means something is wrong between here and GitHub. An
+                // update that cannot be checked is not installed.
+                let _ = tx.send(SelfUpdateEvent::State(SelfUpdateState::Error(
+                    "could not fetch the release's checksums to check the download, so it was not installed. try again later"
                         .into(),
-                ));
+                )));
+                repaint();
+                return;
             }
         }
 

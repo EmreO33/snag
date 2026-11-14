@@ -677,9 +677,12 @@ impl Settings {
         match serde_json::from_str(&raw) {
             Ok(settings) => (settings, None),
             Err(e) => {
+                // Copied aside rather than moved: a later read (the window
+                // after `--print-command`, say) must still find it broken and
+                // say so. The first save of the defaults replaces it.
                 let kept = path.with_extension("json.invalid");
-                let note = match std::fs::rename(&path, &kept) {
-                    Ok(()) => format!(
+                let note = match std::fs::copy(&path, &kept) {
+                    Ok(_) => format!(
                         "settings could not be read ({e}), so defaults are in use. the old file was kept as {}",
                         kept.display()
                     ),
@@ -691,9 +694,8 @@ impl Settings {
     }
 
     pub fn save(&self) -> Result<(), String> {
-        std::fs::create_dir_all(Self::config_dir()).map_err(|e| e.to_string())?;
         let raw = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(Self::config_path(), raw).map_err(|e| e.to_string())
+        crate::util::write_atomic(&Self::config_path(), raw.as_bytes()).map_err(|e| e.to_string())
     }
 
     /// Path to the yt-dlp binary: the override if set, otherwise whatever is on PATH.

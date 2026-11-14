@@ -210,6 +210,7 @@ pub fn spawn(
         // would need it for, or a members-only video would fail to preview and
         // then download perfectly well.
         args.extend(crate::youtube::cookie_args(&settings, &url));
+        args.push("--".to_string());
         args.push(url.clone());
 
         let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -233,11 +234,7 @@ const THUMBNAIL_WIDTH: u32 = 320;
 /// Fetch and decode a thumbnail. Returns None for anything that does not
 /// arrive as a usable image, which is not worth troubling the user about.
 pub fn fetch_thumbnail(url: &str) -> Option<egui::ColorImage> {
-    let resp = ureq::get(url)
-        .set("User-Agent", "Snag")
-        .timeout(std::time::Duration::from_secs(15))
-        .call()
-        .ok()?;
+    let resp = crate::net::get(url).ok()?;
 
     let mut bytes = Vec::new();
     // Cap it: a preview image has no business being larger than this, and an

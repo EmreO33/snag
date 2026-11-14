@@ -314,6 +314,9 @@ pub struct SnagApp {
     /// The queue as last written to disk, so it is only rewritten when what
     /// would be written has actually changed.
     saved_queue: Vec<crate::jobs::Saved>,
+    /// What the queue looked like when it was last compared with
+    /// `saved_queue`, so the comparison only happens when it may differ.
+    saved_fingerprint: Vec<(u64, usize)>,
 
     pub remux: RemuxUi,
     remux_tx: Sender<RemuxEvent>,
@@ -347,9 +350,13 @@ pub struct SnagApp {
 }
 
 impl SnagApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let (settings, load_warning) = Settings::load();
-
+    /// `settings` as main read them, with the warning to show if the file
+    /// could not be read.
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        settings: Settings,
+        load_warning: Option<String>,
+    ) -> Self {
         // A launch that belongs in the tray. The window has already been put
         // there, before it could be seen, by the watcher main starts for
         // exactly that (see `window::park_in_tray`). All that is left here is
@@ -430,6 +437,7 @@ impl SnagApp {
             job_tx,
             job_rx,
             saved_queue,
+            saved_fingerprint: Vec::new(),
             remux: RemuxUi::default(),
             remux_tx,
             remux_rx,
@@ -773,6 +781,11 @@ impl SnagApp {
     /// frame: the queue changes a handful of times a minute at most, and
     /// progress is not part of what gets stored.
     fn persist_queue(&mut self) {
+        let fingerprint = crate::jobs::save_fingerprint(&self.jobs);
+        if fingerprint == self.saved_fingerprint {
+            return;
+        }
+        self.saved_fingerprint = fingerprint;
         let current = crate::jobs::to_save(&self.jobs);
         if current == self.saved_queue {
             return;
@@ -924,6 +937,7 @@ impl SnagApp {
             file: job.file.clone(),
             bytes: job.total.max(job.downloaded),
             finished_unix: crate::updater::now_unix(),
+            checked: Default::default(),
         };
         self.history.record(entry);
         if let Err(e) = self.history.save() {
@@ -1642,6 +1656,9 @@ impl SnagApp {
                     Some(url) => {
                         let short: String = url.chars().take(70).collect();
                         if self.queue_url(url) {
+                            // It starts on the next frame, which a hidden
+                            // window only gets when woken.
+                            Self::repainter(ctx)();
                             self.notify_away("Downloading", &short);
                         } else {
                             self.notify_away("Already queued", &short);
@@ -1733,7 +1750,9 @@ impl SnagApp {
             // decision. The watcher has already said so with a notification.
             if self.settings.background.auto_download_copied {
                 self.queue_url(found.url.clone());
-                ctx.request_repaint();
+                // Woken, not just asked: the download starts on the next
+                // frame, and a window in the tray gets none otherwise.
+                Self::repainter(ctx)();
                 continue;
             }
 
@@ -1881,6 +1900,7 @@ impl SnagApp {
             if t.elapsed().as_millis() > 600 {
                 match self.settings.save() {
                     Ok(()) => {
+                        crate::net::set_proxy(&self.settings.network.proxy);
                         let path_changed = self.saved_snapshot.advanced.ffmpeg_path
                             != self.settings.advanced.ffmpeg_path;
                         self.saved_snapshot = self.settings.clone();
@@ -1955,9 +1975,12 @@ impl eframe::App for SnagApp {
             self.sync_background_features(ctx, false);
         }
         self.wait_for_tray(ctx);
-        // Hidden, Snag still has to wake up often enough to notice a copied
-        // link and to keep any downloads moving.
-        if self.hidden {
+        // Hidden, Snag runs only when something wakes it: the tray, the
+        // clipboard watcher, a download changing state. Each of those does,
+        // so it no longer also wakes itself twice a second, forever, to look.
+        // The one thing that has to keep looking is a wait for a tray that
+        // has not appeared yet.
+        if self.hidden && self.tray_wait.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
         self.handle_dropped_files(ctx);

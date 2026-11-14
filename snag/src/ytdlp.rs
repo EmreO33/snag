@@ -422,6 +422,9 @@ pub fn build_args(url: &str, mode: Mode, overrides: JobOverrides, s: &Settings) 
     }
 
     a.extend(split_args(&s.advanced.extra_args));
+    // "--" ends the options, so a link can only ever be read as a link.
+    // Only http(s) links get this far today, but that guard lives elsewhere.
+    a.push("--".to_string());
     a.push(url.to_string());
     a
 }

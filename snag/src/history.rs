@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use crate::settings::{Mode, Settings};
 
@@ -21,12 +22,37 @@ pub struct Entry {
     /// Final size in bytes, when we saw one.
     pub bytes: f64,
     pub finished_unix: u64,
+    /// The last answer to "is the file still there", and when it was asked.
+    #[serde(skip)]
+    pub checked: FileCheck,
 }
+
+/// A remembered file check. Never part of what makes two entries equal.
+#[derive(Clone, Debug, Default)]
+pub struct FileCheck(std::cell::Cell<Option<(bool, Instant)>>);
+
+impl PartialEq for FileCheck {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+/// How long a file check is believed. The history screen asks on every frame,
+/// for every entry, and asking the disk each time was a thousand file system
+/// calls a frame with a full history, slow on a network or USB drive.
+const RECHECK: Duration = Duration::from_secs(5);
 
 impl Entry {
     /// The file is only worth offering if it is still where we left it.
     pub fn file_exists(&self) -> bool {
-        self.file.as_ref().is_some_and(|f| f.is_file())
+        if let Some((exists, at)) = self.checked.0.get() {
+            if at.elapsed() < RECHECK {
+                return exists;
+            }
+        }
+        let exists = self.file.as_ref().is_some_and(|f| f.is_file());
+        self.checked.0.set(Some((exists, Instant::now())));
+        exists
     }
 
     /// Whether this is what someone typing `query` is looking for: every
@@ -78,9 +104,8 @@ impl History {
     }
 
     pub fn save(&self) -> Result<(), String> {
-        std::fs::create_dir_all(Settings::config_dir()).map_err(|e| e.to_string())?;
         let raw = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(Self::path(), raw).map_err(|e| e.to_string())
+        crate::util::write_atomic(&Self::path(), raw.as_bytes()).map_err(|e| e.to_string())
     }
 
     /// Record a finished download, newest first.
@@ -116,6 +141,7 @@ mod tests {
             file: None,
             bytes: 1.0,
             finished_unix: 0,
+            checked: Default::default(),
         }
     }
 

@@ -17,6 +17,71 @@ pub fn command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
     c
 }
 
+/// Make `cmd` the head of a process group of its own on Linux and macOS, so
+/// `kill_tree` can reach what it starts. Does nothing on Windows, where
+/// `kill_tree` follows the parent links instead.
+pub fn own_group(cmd: &mut Command) -> &mut Command {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    cmd
+}
+
+/// Stop `child` and everything it started.
+///
+/// Killing yt-dlp alone left the ffmpeg it had started to merge or convert
+/// running on, writing a file nobody wanted, after the download had been
+/// cancelled. Waits briefly on Windows, for taskkill, which has to walk the
+/// tree while yt-dlp is still there to walk it from.
+pub fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(windows)]
+    {
+        let _ = command("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    #[cfg(unix)]
+    {
+        // The group's id is yt-dlp's own, since own_group made it the head.
+        let _ = rustix::process::kill_process_group(
+            rustix::process::Pid::from_child(child),
+            rustix::process::Signal::KILL,
+        );
+    }
+    let _ = child.kill();
+}
+
+/// Replace a file's contents so that it is either the old file or the new
+/// one, never half of each.
+///
+/// `fs::write` truncates first and writes after, so a crash or a power cut
+/// in between left a broken settings, history or queue file behind. This
+/// writes a sibling file, flushes it to disk, and renames it over the old one,
+/// which replaces it in a single step on Windows and on Linux.
+pub fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".tmp");
+    let temp = path.with_file_name(name);
+    let written = (|| {
+        let mut file = std::fs::File::create(&temp)?;
+        file.write_all(contents)?;
+        file.sync_all()
+    })();
+    if let Err(e) = written.and_then(|()| std::fs::rename(&temp, path)) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(e);
+    }
+    Ok(())
+}
+
 /// Run a command and return trimmed stdout, or an error string.
 pub fn run_capture(program: &str, args: &[&str]) -> Result<String, String> {
     let out = command(program)
@@ -275,5 +340,60 @@ mod tests {
         assert_eq!(uri, "file:///home/a%20b/Me%20at%20the%20zoo%20%281%29.mkv");
         let uri = super::file_uri(std::path::Path::new("/tmp/çay.mp3"));
         assert_eq!(uri, "file:///tmp/%C3%A7ay.mp3");
+    }
+}
+
+#[cfg(test)]
+mod write_tests {
+    #[test]
+    fn an_atomic_write_replaces_the_file_and_leaves_nothing_behind() {
+        let dir = std::env::temp_dir().join(format!("snag-atomic-{}", std::process::id()));
+        let file = dir.join("settings.json");
+        super::write_atomic(&file, b"old").unwrap();
+        super::write_atomic(&file, b"new").unwrap();
+        assert_eq!(std::fs::read(&file).unwrap(), b"new");
+        let names: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name())
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("settings.json")]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn kill_tree_stops_what_the_process_started() {
+        use std::io::Read;
+        use std::process::Stdio;
+        // A shell that starts a long wait as its own child: the shell is
+        // yt-dlp here, the wait is the ffmpeg it started. Both hold the
+        // pipe, so it only closes once neither is left.
+        let mut cmd = if cfg!(windows) {
+            let mut c = super::command("cmd");
+            c.args(["/c", "ping -n 30 127.0.0.1"]);
+            c
+        } else {
+            let mut c = super::command("sh");
+            c.args(["-c", "sleep 30; echo done"]);
+            c
+        };
+        let mut child = super::own_group(&mut cmd)
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let mut out = child.stdout.take().unwrap();
+        super::kill_tree(&mut child);
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut rest = Vec::new();
+            let _ = out.read_to_end(&mut rest);
+            let _ = tx.send(());
+        });
+        assert!(
+            rx.recv_timeout(std::time::Duration::from_secs(5)).is_ok(),
+            "the grandchild outlived the kill"
+        );
+        let _ = child.wait();
     }
 }

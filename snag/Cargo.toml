@@ -17,7 +17,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 directories = "5"
 arboard = "3"
-ureq = { version = "2", features = ["json", "tls"] }
+# socks-proxy, so a socks5:// proxy in settings works for Snag's own
+# requests as it does for yt-dlp's.
+ureq = { version = "2", features = ["json", "tls", "socks-proxy"] }
 png = "0.17"
 # Deno arrives from its releases as a zip holding one binary. Deflate is the
 # only method those zips use, and reading is all Snag does, so only the
@@ -35,6 +37,11 @@ notify-rust = "4"
 # libayatana-appindicator at build time and on every user's machine.
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 tray-icon = "0.19"
+
+# Cancelling a download stops the ffmpeg yt-dlp started, by killing the
+# process group it runs in. Already in the tree through winit.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", default-features = false, features = ["std", "process"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # The tray icon on Linux: a StatusNotifierItem, spoken over D-Bus, which is

@@ -38,12 +38,22 @@ pub fn watch(
         // Whatever is already on the clipboard when watching starts is not
         // something the user just copied, so take it as already seen.
         let mut last = util::clipboard_text().unwrap_or_default();
+        let mut seen = change_count();
 
         while !stop.load(Ordering::Relaxed) {
             std::thread::sleep(POLL);
             if stop.load(Ordering::Relaxed) {
                 break;
             }
+            // Read only when something new was copied. Reading means opening
+            // the clipboard, which on Windows briefly locks other programs
+            // out of it, and copying out everything on it, however large,
+            // about once a second.
+            let now = change_count();
+            if now.is_some() && now == seen {
+                continue;
+            }
+            seen = now;
 
             let Some(text) = util::clipboard_text() else {
                 continue;
@@ -78,6 +88,23 @@ pub fn watch(
             }
         }
     });
+}
+
+/// A number that changes whenever anything is copied, where the platform
+/// keeps one (Windows). None elsewhere, which means "read and compare".
+fn change_count() -> Option<u32> {
+    #[cfg(windows)]
+    {
+        #[link(name = "user32")]
+        extern "system" {
+            fn GetClipboardSequenceNumber() -> u32;
+        }
+        // Zero means the window station has no clipboard access to count.
+        let n = unsafe { GetClipboardSequenceNumber() };
+        (n != 0).then_some(n)
+    }
+    #[cfg(not(windows))]
+    None
 }
 
 /// Tell the user about a copied link without stealing focus from whatever they
