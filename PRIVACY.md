@@ -1,6 +1,6 @@
 # Snag privacy policy
 
-Last updated: 30 October 2026. Applies to Snag 1.5.10 and later, on every platform it is offered for.
+Last updated: 14 November 2026. Applies to Snag 1.5.10 and later, on every platform it is offered for.
 
 Snag is a desktop app that downloads video and audio using [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [ffmpeg](https://ffmpeg.org). It is made by one developer, EmreO33, and published at <https://github.com/EmreO33/snag>.
 
@@ -26,7 +26,7 @@ These files live in Snag's config folder: `%APPDATA%\Snag\config` on Windows, `~
 ## Who Snag connects to, and why
 
 - **The sites you download from.** When you paste a link, yt-dlp asks that site what the link is (title, formats), Snag fetches its thumbnail image to show you, and yt-dlp then downloads it. The site sees your IP address and whatever it normally sees from a visitor, exactly as if you visited it. If you set a proxy in Snag, these requests go through it.
-- **GitHub**, to check for and download new versions of Snag (from github.com/EmreO33/snag), yt-dlp (from github.com/yt-dlp/yt-dlp) and Deno (from github.com/denoland/deno). You can turn automatic update checks off in Snag's settings. Snag's own updates are checked against the checksums published with each release before they are installed.
+- **GitHub**, to check for and download new versions of Snag (from github.com/EmreO33/snag), yt-dlp (from github.com/yt-dlp/yt-dlp) and Deno (from github.com/denoland/deno). You can turn automatic update checks off in Snag's settings. Every one of these downloads is checked against the checksum its project publishes before it is used, and one that does not match, or cannot be checked, is thrown away.
 - **winget** (Windows only), when you ask Snag to install ffmpeg: Snag runs `winget install Gyan.FFmpeg`, which uses Microsoft's package sources as any winget install does.
 
 Snag sends nothing to the developer or to any other party.

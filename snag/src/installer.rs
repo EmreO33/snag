@@ -43,11 +43,115 @@ pub fn local_name() -> &'static str {
     }
 }
 
-pub fn download_url() -> String {
+/// yt-dlp's unpacked build, where Snag uses it: a folder holding yt-dlp.exe
+/// and the `_internal` folder it runs from.
+///
+/// On Windows the single-file yt-dlp.exe unpacks itself into a temporary
+/// folder every time it runs, before doing anything else. Measured with
+/// 2026.10.26, `--version` took 3.2 to 3.4 seconds that way and 0.29 to 0.31
+/// unpacked, and every link preview and every download paid the difference.
+/// The single file is still what the other platforms get.
+fn unpacked_asset() -> Option<&'static str> {
+    if cfg!(all(windows, target_arch = "x86_64")) {
+        Some("yt-dlp_win.zip")
+    } else if cfg!(all(windows, target_arch = "aarch64")) {
+        Some("yt-dlp_win_arm64.zip")
+    } else {
+        None
+    }
+}
+
+/// What Snag downloads to install yt-dlp: the unpacked build where there is
+/// one for this platform, the single file otherwise.
+fn source_asset() -> &'static str {
+    unpacked_asset().unwrap_or(asset_name())
+}
+
+fn source_url() -> String {
     format!(
         "https://github.com/yt-dlp/yt-dlp/releases/latest/download/{}",
-        asset_name()
+        source_asset()
     )
+}
+
+/// The folder an unpacked yt-dlp keeps beside its exe.
+const UNPACKED_DIR: &str = "_internal";
+
+/// Unpack `zip` into a fresh `staging` folder, refusing any entry that would
+/// land outside it or is a link.
+fn extract_all(zip: &Path, staging: &Path) -> Result<(), String> {
+    let _ = std::fs::remove_dir_all(staging);
+    let file = std::fs::File::open(zip).map_err(|e| e.to_string())?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("bad zip: {e}"))?;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(|e| format!("bad zip: {e}"))?;
+        let name = entry.name().map(|n| n.into_owned()).unwrap_or_default();
+        let Some(relative) = entry.enclosed_name() else {
+            return Err(format!("the archive has an unsafe path in it: {name}"));
+        };
+        if entry.is_symlink() {
+            return Err(format!("the archive has a link in it: {name}"));
+        }
+        let out = staging.join(relative);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
+            continue;
+        }
+        if let Some(parent) = out.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let mut written = std::fs::File::create(&out).map_err(|e| e.to_string())?;
+        std::io::copy(&mut entry, &mut written).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Put an unpacked yt-dlp from `zip` into `dir`, replacing whichever build
+/// was there, so that `dir` ends up with the old one or the new one whole.
+fn install_unpacked(zip: &Path, dir: &Path) -> Result<(), String> {
+    let staging = dir.join("yt-dlp.new");
+    let result = (|| {
+        extract_all(zip, &staging)?;
+        let (new_exe, new_internal) = (staging.join(local_name()), staging.join(UNPACKED_DIR));
+        if !new_exe.is_file() || !new_internal.is_dir() {
+            return Err("the archive is not the yt-dlp build it should be".to_string());
+        }
+
+        let (exe, internal) = (dir.join(local_name()), dir.join(UNPACKED_DIR));
+        let (old_exe, old_internal) = (
+            dir.join(format!("{}.old", local_name())),
+            dir.join(format!("{UNPACKED_DIR}.old")),
+        );
+        let _ = std::fs::remove_file(&old_exe);
+        let _ = std::fs::remove_dir_all(&old_internal);
+
+        // The old build is moved aside rather than deleted, so a failure
+        // part way can put it back. Windows refuses to move it while a
+        // download is using it.
+        let busy = "yt-dlp is in use: let the running downloads finish, then try again";
+        if internal.exists() {
+            std::fs::rename(&internal, &old_internal).map_err(|_| busy.to_string())?;
+        }
+        if exe.exists() && std::fs::rename(&exe, &old_exe).is_err() {
+            let _ = std::fs::rename(&old_internal, &internal);
+            return Err(busy.to_string());
+        }
+        let moved = std::fs::rename(&new_internal, &internal)
+            .and_then(|()| std::fs::rename(&new_exe, &exe));
+        if let Err(e) = moved {
+            let _ = std::fs::remove_dir_all(&internal);
+            let _ = std::fs::remove_file(&exe);
+            let _ = std::fs::rename(&old_internal, &internal);
+            let _ = std::fs::rename(&old_exe, &exe);
+            return Err(format!("could not move yt-dlp into place: {e}"));
+        }
+        // Whatever cannot go yet goes on the next install.
+        let _ = std::fs::remove_file(&old_exe);
+        let _ = std::fs::remove_dir_all(&old_internal);
+        Ok(())
+    })();
+    let _ = std::fs::remove_dir_all(&staging);
+    result
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -213,10 +317,7 @@ pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send
 pub fn install_now(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
     {
         let dest = dir.join(local_name());
-        let _ = tx.send(InstallEvent::Log(format!(
-            "source:      {}",
-            download_url()
-        )));
+        let _ = tx.send(InstallEvent::Log(format!("source:      {}", source_url())));
         let _ = tx.send(InstallEvent::Log(format!(
             "destination: {}",
             dest.display()
@@ -227,11 +328,20 @@ pub fn install_now(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
         }));
         repaint();
 
-        let fetched = published_sha256(
+        let expected = published_sha256(
             "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS",
-            asset_name(),
-        )
-        .and_then(|expected| download_to(&download_url(), &dest, &expected, tx));
+            source_asset(),
+        );
+        let fetched = expected.and_then(|expected| {
+            if unpacked_asset().is_none() {
+                return download_to(&source_url(), &dest, &expected, tx);
+            }
+            let zip = dir.join("yt-dlp-download.zip");
+            let unpacked = download_to(&source_url(), &zip, &expected, tx)
+                .and_then(|()| install_unpacked(&zip, dir));
+            let _ = std::fs::remove_file(&zip);
+            unpacked
+        });
         if let Err(e) = fetched {
             let _ = tx.send(InstallEvent::State(InstallState::Failed(e)));
             repaint();

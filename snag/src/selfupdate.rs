@@ -133,19 +133,48 @@ fn linux_package_kind(exe: &Path) -> Option<InstallKind> {
     if !exe.starts_with("/usr") && !exe.starts_with("/opt") {
         return None;
     }
-    // Asked of whichever package manager is here, since that is the one
-    // that would object to the file changing under it.
+    // Whichever package manager owns the file, since that is the one that
+    // would object to it changing under it. This runs before the window
+    // opens, so dpkg's and pacman's own file lists are read directly rather
+    // than starting their tools; rpm's database can only be asked through
+    // rpm, so it is, but only where there is one.
     let path = exe.display().to_string();
-    let owns = |tool: &str, args: &[&str]| crate::util::run_capture(tool, args).is_ok();
-    if owns("dpkg-query", &["-S", &path]) {
-        Some(InstallKind::Deb)
-    } else if owns("pacman", &["-Qo", &path]) {
-        Some(InstallKind::Aur)
-    } else if owns("rpm", &["-qf", &path]) {
-        Some(InstallKind::Rpm)
-    } else {
-        None
+    let lists = |file: &Path| {
+        std::fs::read_to_string(file).is_ok_and(|text| {
+            text.lines()
+                .any(|l| l.trim_end_matches('/') == path || format!("/{l}") == path)
+        })
+    };
+    let dpkg = Path::new("/var/lib/dpkg/info");
+    if ["snag.list", "snag:amd64.list", "snag:arm64.list"]
+        .iter()
+        .any(|name| lists(&dpkg.join(name)))
+    {
+        return Some(InstallKind::Deb);
     }
+    // pacman keeps one folder per installed package, its files listed
+    // without the leading slash.
+    let aur = std::fs::read_dir("/var/lib/pacman/local")
+        .ok()
+        .and_then(|dir| {
+            dir.flatten()
+                .find(|e| {
+                    e.file_name()
+                        .to_string_lossy()
+                        .starts_with("snag-downloader-bin-")
+                })
+                .map(|e| e.path().join("files"))
+        });
+    if aur.is_some_and(|files| lists(&files)) {
+        return Some(InstallKind::Aur);
+    }
+    let rpm_db = ["/var/lib/rpm", "/usr/lib/sysimage/rpm"]
+        .iter()
+        .any(|d| Path::new(d).is_dir());
+    if rpm_db && crate::util::run_capture("rpm", &["-qf", &path]).is_ok() {
+        return Some(InstallKind::Rpm);
+    }
+    None
 }
 
 /// The command that installs a downloaded package file, for the package

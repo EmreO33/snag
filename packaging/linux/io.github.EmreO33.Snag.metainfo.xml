@@ -96,6 +96,14 @@
   </keywords>
 
   <releases>
+    <release version="1.5.13" date="2026-11-14">
+      <description>
+        <p>Faster and safer: downloaded tools are checked against their
+          published checksums, the proxy setting covers all of Snag's own
+          traffic, cancelling stops everything a download started, and
+          settings can no longer be lost to a crash mid-save.</p>
+      </description>
+    </release>
     <release version="1.5.12" date="2026-11-14">
       <description>
         <p>Security updates: the libraries Snag is built from are brought up

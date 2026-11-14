@@ -347,6 +347,9 @@ pub struct SnagApp {
     app_rx: Receiver<SelfUpdateEvent>,
 
     pub toast: Option<Toast>,
+    /// Why the settings could not be read, if they could not, for the setup
+    /// screen to show: it has no status bar for the toast.
+    pub settings_warning: Option<String>,
 }
 
 impl SnagApp {
@@ -460,6 +463,7 @@ impl SnagApp {
             upd_tx,
             upd_rx,
             toast: None,
+            settings_warning: load_warning.clone(),
             dirty_since: None,
             settings,
         };

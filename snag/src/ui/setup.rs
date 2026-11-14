@@ -68,6 +68,12 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                 .size(12.0)
                 .color(p.dim),
         );
+        // Setup again because the settings file would not read: say so here,
+        // since this screen has no status bar for the usual message.
+        if let Some(warning) = &app.settings_warning {
+            ui.add_space(10.0);
+            ui.label(egui::RichText::new(warning).size(12.0).color(p.warn));
+        }
         ui.add_space(18.0);
     });
 

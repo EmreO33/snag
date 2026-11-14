@@ -8,6 +8,41 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.13
+
+Fixes from a review of the whole codebase.
+
+- **Link previews and downloads start about 3 seconds sooner on Windows.**
+  Snag now installs yt-dlp's unpacked Windows build. The single-file
+  yt-dlp.exe unpacked itself to a temporary folder every time it ran, which
+  took 3.2 to 3.4 seconds before it did anything; the unpacked build starts
+  in 0.3. Existing installs switch over at the next yt-dlp update.
+- **yt-dlp and Deno are checked against their published checksums** before
+  Snag uses them, and an update to Snag that cannot be checked is no longer
+  installed anyway.
+- **The proxy in settings now covers all of Snag's own traffic**:
+  thumbnails, update checks and downloads of yt-dlp, Deno and Snag. Before,
+  only yt-dlp used it. If the proxy cannot be reached, those requests fail
+  rather than going around it.
+- **Slow connections no longer fail big downloads.** Downloading Deno or a
+  Snag update had a time limit on the whole transfer, which a connection
+  slower than about 6 Mbit/s could not meet. Now only a transfer that has
+  actually stalled times out.
+- **Cancelling a download stops everything it started**, including the
+  ffmpeg merging or converting it, which used to carry on in the background.
+- **Settings, history and the queue survive a crash while saving.** They are
+  written to a new file and swapped in, rather than overwritten in place.
+- **A settings file that cannot be read is now reported.** Snag used to set
+  it aside and silently start first-run setup; setup now says what happened
+  and where the old file was kept.
+- Less work while Snag runs: the history screen no longer checks every
+  file on disk on every frame, download progress no longer forces a redraw
+  per line, the queue is only rebuilt when it changes, Snag in the tray no
+  longer wakes itself twice a second, and on Windows the clipboard is only
+  read after something new is copied.
+- On Linux, finding out how Snag was installed no longer starts the
+  package manager's tools before the window opens.
+
 ## 1.5.12
 
 - **Security updates.** The libraries Snag is built from are brought up to
