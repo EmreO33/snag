@@ -96,6 +96,12 @@
   </keywords>
 
   <releases>
+    <release version="1.5.12" date="2026-11-14">
+      <description>
+        <p>Security updates: the libraries Snag is built from are brought up
+          to date, including fixes to its secure connections.</p>
+      </description>
+    </release>
     <release version="1.5.11" date="2026-10-14">
       <description>
         <p>A Windows fix: Snag opens under its pinned taskbar icon.</p>

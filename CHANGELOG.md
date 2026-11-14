@@ -8,6 +8,17 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
+## 1.5.12
+
+- **Security updates.** The libraries Snag is built from are brought up to
+  date and built with the newest Rust (1.100). That includes fixes to
+  rustls, which makes Snag's secure connections to GitHub, for four TLS
+  problems and for trusting certificates that have since been distrusted,
+  and a new version of the zip library, which had extraction bugs (Snag
+  never used the affected functions, but it is updated all the same).
+- Every change to Snag is now checked against the RustSec vulnerability
+  database before it can be released.
+
 ## 1.5.11
 
 - **Snag opens under its pinned taskbar icon** on Windows, rather than as
