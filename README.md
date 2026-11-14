@@ -37,6 +37,11 @@ Native Rust, no browser inside, one small binary that starts instantly.
 **[Installer](https://github.com/EmreO33/snag/releases/latest)**<br>
 `Snag-<version>-windows-setup.exe`
 
+or with winget:
+```powershell
+winget install EmreO33.Snag
+```
+
 or with [Scoop](https://scoop.sh):
 ```powershell
 scoop bucket add snag https://github.com/EmreO33/snag
