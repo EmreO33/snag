@@ -8,7 +8,7 @@ pub mod setup;
 pub mod updates_view;
 
 use eframe::egui;
-use egui::{Color32, FontFamily, FontId, Rounding, Sense, Stroke, Vec2};
+use egui::{Color32, CornerRadius, FontFamily, FontId, Sense, Stroke, Vec2};
 
 use crate::app::{SnagApp, View};
 use crate::jobs::JobState;
@@ -34,12 +34,7 @@ fn nav_item(
         None => label.to_string(),
     };
     response.widget_info(|| {
-        egui::WidgetInfo::selected(
-            egui::WidgetType::SelectableLabel,
-            true,
-            selected,
-            spoken.clone(),
-        )
+        egui::WidgetInfo::selected(egui::Role::Button, true, selected, spoken.clone())
     });
 
     if ui.is_rect_visible(rect) {
@@ -60,7 +55,7 @@ fn nav_item(
             p.card,
             select_t,
         );
-        ui.painter().rect_filled(rect, Rounding::same(9.0), fill);
+        ui.painter().rect_filled(rect, CornerRadius::same(9), fill);
 
         // The accent mark that says which screen you are on is not drawn
         // here: there is one of it for the whole rail, and it slides. See
@@ -83,7 +78,7 @@ fn nav_item(
                 Vec2::new(galley.size().x + 12.0, 18.0),
             );
             ui.painter()
-                .rect_filled(pill, Rounding::same(9.0), p.accent);
+                .rect_filled(pill, CornerRadius::same(9), p.accent);
             ui.painter()
                 .galley(pill.center() - galley.size() * 0.5, galley, p.on_accent);
         }
@@ -92,18 +87,18 @@ fn nav_item(
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-pub fn sidebar(app: &mut SnagApp, ctx: &egui::Context) {
+pub fn sidebar(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
 
-    egui::SidePanel::left("snag_nav")
-        .exact_width(148.0)
+    egui::Panel::left("snag_nav")
+        .exact_size(148.0)
         .resizable(false)
         .frame(
-            egui::Frame::none()
+            egui::Frame::NONE
                 .fill(p.panel)
-                .inner_margin(egui::Margin::symmetric(10.0, 16.0)),
+                .inner_margin(egui::Margin::symmetric(10, 16)),
         )
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 crate::theme::logo(ui, &p, 36.0, app.logo.as_ref());
                 ui.add_space(2.0);
@@ -174,7 +169,7 @@ pub fn sidebar(app: &mut SnagApp, ctx: &egui::Context) {
             if let Some(rect) = mark {
                 let y = motion::toward(
                     ui.ctx(),
-                    egui::Id::new("nav_mark_y"),
+                    egui::Id::unique("nav_mark_y"),
                     rect.center().y,
                     motion::SWITCH,
                 );
@@ -185,12 +180,13 @@ pub fn sidebar(app: &mut SnagApp, ctx: &egui::Context) {
                     egui::pos2(rect.left() + 4.5, y),
                     Vec2::new(3.0, 14.0),
                 );
-                ui.painter().rect_filled(bar, Rounding::same(2.0), p.accent);
+                ui.painter()
+                    .rect_filled(bar, CornerRadius::same(2), p.accent);
             }
         });
 }
 
-pub fn status_bar(app: &mut SnagApp, ctx: &egui::Context) {
+pub fn status_bar(app: &mut SnagApp, ui: &mut egui::Ui) {
     let p = app.palette;
 
     // Toasts fade out after a few seconds.
@@ -202,14 +198,14 @@ pub fn status_bar(app: &mut SnagApp, ctx: &egui::Context) {
         app.toast = None;
     }
 
-    egui::TopBottomPanel::bottom("snag_status")
-        .exact_height(30.0)
+    egui::Panel::bottom("snag_status")
+        .exact_size(30.0)
         .frame(
-            egui::Frame::none()
+            egui::Frame::NONE
                 .fill(p.panel)
-                .inner_margin(egui::Margin::symmetric(14.0, 6.0)),
+                .inner_margin(egui::Margin::symmetric(14, 6)),
         )
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui.horizontal(|ui| {
                 match &toast {
                     Some((text, bad, age)) => {
@@ -220,7 +216,7 @@ pub fn status_bar(app: &mut SnagApp, ctx: &egui::Context) {
                         // Slides in from the left by a few pixels as it fades.
                         ui.add_space((1.0 - arriving) * 8.0);
                         ui.label(egui::RichText::new(text).size(12.0).color(color));
-                        ctx.request_repaint_after(std::time::Duration::from_millis(
+                        ui.ctx().request_repaint_after(std::time::Duration::from_millis(
                             if arriving < 1.0 { 16 } else { 120 },
                         ));
                     }
@@ -306,7 +302,7 @@ pub fn text_field(
         .hint_text(egui::RichText::new(hint).color(p.faint))
         .text_color(p.text)
         .font(FontId::new(14.0, FontFamily::Monospace))
-        .margin(egui::Margin::symmetric(12.0, 9.0))
+        .margin(egui::Margin::symmetric(12, 9))
         .desired_width(width);
 
     let before = ui.visuals().clone();
@@ -314,15 +310,15 @@ pub fn text_field(
     ui.visuals_mut().widgets.inactive.bg_stroke = Stroke::new(1.0_f32, p.line);
     ui.visuals_mut().widgets.hovered.bg_stroke = Stroke::new(1.0_f32, p.line);
     ui.visuals_mut().widgets.active.bg_stroke = Stroke::new(1.0_f32, p.accent);
-    ui.visuals_mut().widgets.inactive.rounding = Rounding::same(10.0);
-    ui.visuals_mut().widgets.hovered.rounding = Rounding::same(10.0);
-    ui.visuals_mut().widgets.active.rounding = Rounding::same(10.0);
+    ui.visuals_mut().widgets.inactive.corner_radius = CornerRadius::same(10);
+    ui.visuals_mut().widgets.hovered.corner_radius = CornerRadius::same(10);
+    ui.visuals_mut().widgets.active.corner_radius = CornerRadius::same(10);
     let r = ui.add(edit);
     *ui.visuals_mut() = before;
 
     let (name, spoken) = (hint.to_string(), value.clone());
     r.widget_info(|| {
-        let mut info = egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, name.clone());
+        let mut info = egui::WidgetInfo::labeled(egui::Role::TextInput, true, name.clone());
         // Keep what is typed as the value, so it is read back as well as named.
         info.current_text_value = Some(spoken.clone());
         info
@@ -349,7 +345,7 @@ pub fn field_row(
             let spoken = (label.to_string(), value.clone());
             field.widget_info(|| {
                 let mut info =
-                    egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, spoken.0.clone());
+                    egui::WidgetInfo::labeled(egui::Role::TextInput, true, spoken.0.clone());
                 info.current_text_value = Some(spoken.1.clone());
                 info
             });

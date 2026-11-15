@@ -60,7 +60,7 @@ fn timeline(app: &mut SnagApp, ui: &mut egui::Ui) {
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(width, STRIP_HEIGHT), egui::Sense::drag());
     let painter = ui.painter_at(rect);
-    let rounding = egui::Rounding::same(8.0);
+    let rounding = egui::CornerRadius::same(8);
 
     let x_of = |t: f64| rect.left() + (t / duration) as f32 * rect.width();
     let t_of = |x: f32| ((x - rect.left()) / rect.width()).clamp(0.0, 1.0) as f64 * duration;
@@ -106,6 +106,7 @@ fn timeline(app: &mut SnagApp, ui: &mut egui::Ui) {
         ),
         0.0,
         egui::Stroke::new(2.0_f32, p.accent),
+        egui::StrokeKind::Inside,
     );
 
     for (x, handle) in [
@@ -122,7 +123,7 @@ fn timeline(app: &mut SnagApp, ui: &mut egui::Ui) {
                 egui::pos2(x - half, rect.top()),
                 egui::pos2(x + half, rect.bottom()),
             ),
-            egui::Rounding::same(half),
+            egui::CornerRadius::same(half.round() as u8),
             p.accent,
         );
     }
@@ -195,10 +196,10 @@ fn string_pills(
     value: &mut String,
     options: &[(&str, &str)],
 ) {
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(p.card)
-        .rounding(egui::Rounding::same(12.0))
-        .inner_margin(egui::Margin::same(4.0))
+        .corner_radius(egui::CornerRadius::same(12))
+        .inner_margin(egui::Margin::same(4))
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing = egui::Vec2::new(4.0, 4.0);
             ui.horizontal_wrapped(|ui| {
@@ -467,10 +468,10 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             if !app.remux.log.is_empty() {
                 ui.add_space(14.0);
                 theme::section_title(ui, &p, "ffmpeg output");
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(p.well)
-                    .rounding(egui::Rounding::same(8.0))
-                    .inner_margin(egui::Margin::symmetric(10.0, 8.0))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .inner_margin(egui::Margin::symmetric(10, 8))
                     .show(ui, |ui| {
                         egui::ScrollArea::vertical()
                             .max_height(150.0)

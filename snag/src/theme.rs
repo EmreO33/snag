@@ -3,8 +3,8 @@
 
 use eframe::egui;
 use egui::{
-    Align, Color32, FontFamily, FontId, Layout, Rect, Response, Rounding, Sense, Stroke, TextStyle,
-    Ui, Vec2,
+    Align, Color32, CornerRadius, FontFamily, FontId, Layout, Rect, Response, Sense, Stroke,
+    TextStyle, Ui, Vec2,
 };
 
 use crate::motion;
@@ -110,7 +110,7 @@ pub fn palette(theme: ThemeMode, accent: Accent) -> Palette {
 
 /// Apply the palette to egui's global style. Everything is monospace on purpose.
 pub fn apply(ctx: &egui::Context, p: &Palette, scale: f32) {
-    let mut style = (*ctx.style()).clone();
+    let mut style = (*ctx.global_style()).clone();
 
     let mono = FontFamily::Monospace;
     style.text_styles = [
@@ -130,8 +130,8 @@ pub fn apply(ctx: &egui::Context, p: &Palette, scale: f32) {
     v.extreme_bg_color = p.well;
     v.faint_bg_color = p.card;
     v.window_stroke = Stroke::new(1.0_f32, p.line);
-    v.window_rounding = Rounding::same(12.0);
-    v.menu_rounding = Rounding::same(10.0);
+    v.window_corner_radius = CornerRadius::same(12);
+    v.menu_corner_radius = CornerRadius::same(10);
     v.selection.bg_fill = p.accent.linear_multiply(0.35);
     v.selection.stroke = Stroke::new(1.0_f32, p.text);
     v.hyperlink_color = p.accent;
@@ -146,7 +146,7 @@ pub fn apply(ctx: &egui::Context, p: &Palette, scale: f32) {
         w.bg_fill = fill;
         w.weak_bg_fill = fill;
         w.bg_stroke = Stroke::new(1.0_f32, p.line);
-        w.rounding = Rounding::same(10.0);
+        w.corner_radius = CornerRadius::same(10);
         w.fg_stroke = Stroke::new(1.0_f32, p.text);
         w.expansion = 0.0;
     }
@@ -159,8 +159,15 @@ pub fn apply(ctx: &egui::Context, p: &Palette, scale: f32) {
     style.spacing.scroll.bar_width = 8.0;
     style.spacing.slider_width = 220.0;
 
-    ctx.set_style(style);
-    ctx.set_pixels_per_point(scale.clamp(0.75, 2.0));
+    // Snag draws its own light or dark palette whatever the system says,
+    // so both of egui's styles get it.
+    ctx.set_style_of(egui::Theme::Dark, style.clone());
+    ctx.set_style_of(egui::Theme::Light, style);
+    // The interface scale is a zoom on top of the screen's own scaling.
+    // Setting pixels per point instead divided by the screen's scaling,
+    // which happened to come out right only while that was not known yet:
+    // on a 150% screen Snag drew at two thirds of its size.
+    ctx.set_zoom_factor(scale.clamp(0.75, 2.0));
 }
 
 // --- widgets ---------------------------------------------------------------
@@ -171,7 +178,7 @@ pub fn apply(ctx: &egui::Context, p: &Palette, scale: f32) {
 /// egui works this out for itself from the text of its own widgets, but these
 /// are rectangles and glyphs drawn straight onto the canvas, so without this
 /// they reach assistive software as unlabelled shapes.
-fn announce(response: &Response, kind: egui::WidgetType, enabled: bool, label: &str) {
+fn announce(response: &Response, kind: egui::Role, enabled: bool, label: &str) {
     let label = label.to_string();
     response.widget_info(|| egui::WidgetInfo::labeled(kind, enabled, label.clone()));
 }
@@ -179,7 +186,7 @@ fn announce(response: &Response, kind: egui::WidgetType, enabled: bool, label: &
 /// The same, for something that is either on or off.
 fn announce_selected(
     response: &Response,
-    kind: egui::WidgetType,
+    kind: egui::Role,
     enabled: bool,
     selected: bool,
     label: &str,
@@ -248,12 +255,12 @@ pub fn pill(ui: &mut Ui, p: &Palette, text: &str, selected: bool, enabled: bool)
         } else {
             rect
         };
-        ui.painter().rect_filled(rect, Rounding::same(9.0), fill);
+        ui.painter().rect_filled(rect, CornerRadius::same(9), fill);
         let pos = rect.center() - galley.size() * 0.5;
         ui.painter().galley(pos, galley, text_color);
     }
 
-    announce_selected(&response, egui::WidgetType::Button, enabled, selected, text);
+    announce_selected(&response, egui::Role::Button, enabled, selected, text);
 
     if enabled {
         response.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -271,10 +278,10 @@ pub fn pill_group<T: PartialEq + Copy>(
     label: impl Fn(&T) -> &'static str,
 ) -> bool {
     let mut changed = false;
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(p.card)
-        .rounding(Rounding::same(12.0))
-        .inner_margin(egui::Margin::same(4.0))
+        .corner_radius(CornerRadius::same(12))
+        .inner_margin(egui::Margin::same(4))
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
             ui.horizontal_wrapped(|ui| {
@@ -329,16 +336,20 @@ pub fn action_button(
         } else {
             rect
         };
-        ui.painter().rect_filled(rect, Rounding::same(10.0), fill);
+        ui.painter().rect_filled(rect, CornerRadius::same(10), fill);
         if !primary {
-            ui.painter()
-                .rect_stroke(rect, Rounding::same(10.0), Stroke::new(1.0_f32, p.line));
+            ui.painter().rect_stroke(
+                rect,
+                CornerRadius::same(10),
+                Stroke::new(1.0_f32, p.line),
+                egui::StrokeKind::Inside,
+            );
         }
         ui.painter()
             .text(rect.center(), egui::Align2::CENTER_CENTER, text, font, fg);
     }
 
-    announce(&response, egui::WidgetType::Button, enabled, text);
+    announce(&response, egui::Role::Button, enabled, text);
 
     if enabled {
         response.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -361,10 +372,14 @@ pub fn toggle(ui: &mut Ui, p: &Palette, on: &mut bool) -> Response {
         let track = motion::mix(p.well, p.accent, t);
         let radius = rect.height() * 0.5;
         ui.painter()
-            .rect_filled(rect, Rounding::same(radius), track);
+            .rect_filled(rect, CornerRadius::same(radius.round() as u8), track);
         if !*on {
-            ui.painter()
-                .rect_stroke(rect, Rounding::same(radius), Stroke::new(1.0_f32, p.line));
+            ui.painter().rect_stroke(
+                rect,
+                CornerRadius::same(radius.round() as u8),
+                Stroke::new(1.0_f32, p.line),
+                egui::StrokeKind::Inside,
+            );
         }
         let knob_x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), t);
         let knob_color = motion::mix(p.text, p.on_accent, t);
@@ -375,7 +390,7 @@ pub fn toggle(ui: &mut Ui, p: &Palette, on: &mut bool) -> Response {
         );
     }
 
-    announce_selected(&response, egui::WidgetType::Checkbox, true, *on, "");
+    announce_selected(&response, egui::Role::CheckBox, true, *on, "");
 
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
@@ -409,7 +424,7 @@ pub fn checkbox(ui: &mut Ui, p: &Palette, on: &mut bool, label: &str) -> Respons
         let tick_t = motion::on_off(ui.ctx(), response.id.with("tick"), *on, motion::HOVER);
         ui.painter().rect_filled(
             rect,
-            Rounding::same(6.0),
+            CornerRadius::same(6),
             motion::mix(Color32::TRANSPARENT, p.card, hover_t),
         );
         let box_rect = egui::Rect::from_center_size(
@@ -420,14 +435,15 @@ pub fn checkbox(ui: &mut Ui, p: &Palette, on: &mut bool, label: &str) -> Respons
         // the animation, so ticking a row reads as one movement.
         ui.painter().rect_filled(
             box_rect,
-            Rounding::same(4.0),
+            CornerRadius::same(4),
             motion::mix(Color32::TRANSPARENT, p.accent, tick_t),
         );
         if tick_t < 1.0 {
             ui.painter().rect_stroke(
                 box_rect,
-                Rounding::same(4.0),
+                CornerRadius::same(4),
                 Stroke::new(1.0_f32, motion::mix(p.line, Color32::TRANSPARENT, tick_t)),
+                egui::StrokeKind::Inside,
             );
         }
         if tick_t > 0.0 {
@@ -450,17 +466,17 @@ pub fn checkbox(ui: &mut Ui, p: &Palette, on: &mut bool, label: &str) -> Respons
         ui.painter().galley(text_pos, galley, p.text);
     }
 
-    announce_selected(&response, egui::WidgetType::Checkbox, true, *on, label);
+    announce_selected(&response, egui::Role::CheckBox, true, *on, label);
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 /// A labelled toggle row: title on the left, switch on the right, note beneath.
 pub fn toggle_row(ui: &mut Ui, p: &Palette, title: &str, note: &str, on: &mut bool) -> bool {
     let mut changed = false;
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(p.card)
-        .rounding(Rounding::same(12.0))
-        .inner_margin(egui::Margin::symmetric(14.0, 10.0))
+        .corner_radius(CornerRadius::same(12))
+        .inner_margin(egui::Margin::symmetric(14, 10))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(title).color(p.text));
@@ -468,7 +484,7 @@ pub fn toggle_row(ui: &mut Ui, p: &Palette, title: &str, note: &str, on: &mut bo
                     // The switch itself carries no text, so the row's title is
                     // the only thing that can name it out loud.
                     let switch = toggle(ui, p, on);
-                    announce_selected(&switch, egui::WidgetType::Checkbox, true, *on, title);
+                    announce_selected(&switch, egui::Role::CheckBox, true, *on, title);
                     if switch.changed() {
                         changed = true;
                     }
@@ -494,10 +510,10 @@ pub fn note_text(ui: &mut Ui, p: &Palette, text: &str) {
 }
 
 pub fn card<R>(ui: &mut Ui, p: &Palette, add: impl FnOnce(&mut Ui) -> R) -> R {
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(p.card)
-        .rounding(Rounding::same(14.0))
-        .inner_margin(egui::Margin::symmetric(16.0, 14.0))
+        .corner_radius(CornerRadius::same(14))
+        .inner_margin(egui::Margin::symmetric(16, 14))
         .show(ui, add)
         .inner
 }
@@ -527,7 +543,8 @@ pub fn progress_bar(ui: &mut Ui, p: &Palette, fraction: f32, indeterminate: bool
     if !ui.is_rect_visible(rect) {
         return;
     }
-    ui.painter().rect_filled(rect, Rounding::same(3.0), p.well);
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(3), p.well);
 
     if indeterminate {
         // A short bar sweeping back and forth while we have no percentage.
@@ -539,7 +556,8 @@ pub fn progress_bar(ui: &mut Ui, p: &Palette, fraction: f32, indeterminate: bool
             egui::pos2(rect.left() + x, rect.top()),
             Vec2::new(span, rect.height()),
         );
-        ui.painter().rect_filled(bar, Rounding::same(3.0), p.accent);
+        ui.painter()
+            .rect_filled(bar, CornerRadius::same(3), p.accent);
         ui.ctx().request_repaint();
     } else if fraction > 0.0 {
         // yt-dlp reports in jumps, and a bar that jumps looks like it is
@@ -548,7 +566,7 @@ pub fn progress_bar(ui: &mut Ui, p: &Palette, fraction: f32, indeterminate: bool
         // estimate either way.
         let shown = motion::toward(
             ui.ctx(),
-            ui.id().with("progress"),
+            ui.scope_id().with("progress"),
             fraction.clamp(0.0, 1.0),
             0.35,
         );
@@ -559,6 +577,7 @@ pub fn progress_bar(ui: &mut Ui, p: &Palette, fraction: f32, indeterminate: bool
             rect.min,
             Vec2::new(rect.width() * shown.clamp(0.0, 1.0), rect.height()),
         );
-        ui.painter().rect_filled(bar, Rounding::same(3.0), p.accent);
+        ui.painter()
+            .rect_filled(bar, CornerRadius::same(3), p.accent);
     }
 }

@@ -301,7 +301,6 @@ fn main() -> eframe::Result<()> {
             .with_app_id("io.github.EmreO33.Snag")
             .with_icon(icon::icon_data().unwrap_or_default())
             .with_visible(!to_tray),
-        vsync: true,
         centered: true,
         ..Default::default()
     };

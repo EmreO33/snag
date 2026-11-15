@@ -372,10 +372,10 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
             if !app.update_log.is_empty() {
                 ui.add_space(6.0);
                 theme::section_title(ui, &p, "updater output");
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(p.well)
-                    .rounding(egui::Rounding::same(8.0))
-                    .inner_margin(egui::Margin::symmetric(10.0, 8.0))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .inner_margin(egui::Margin::symmetric(10, 8))
                     .show(ui, |ui| {
                         for line in &app.update_log {
                             ui.label(egui::RichText::new(line).size(11.0).color(p.dim));

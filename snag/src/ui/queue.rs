@@ -308,10 +308,10 @@ fn job_card(
 
         if job.show_log {
             ui.add_space(8.0);
-            egui::Frame::none()
+            egui::Frame::NONE
                 .fill(p.well)
-                .rounding(egui::Rounding::same(8.0))
-                .inner_margin(egui::Margin::symmetric(10.0, 8.0))
+                .corner_radius(egui::CornerRadius::same(8))
+                .inner_margin(egui::Margin::symmetric(10, 8))
                 .show(ui, |ui| {
                     egui::ScrollArea::vertical()
                         .max_height(160.0)

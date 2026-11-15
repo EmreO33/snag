@@ -414,10 +414,10 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                 &p,
                                 if failed { "what happened" } else { "details" },
                             );
-                            egui::Frame::none()
+                            egui::Frame::NONE
                                 .fill(p.well)
-                                .rounding(egui::Rounding::same(8.0))
-                                .inner_margin(egui::Margin::symmetric(12.0, 10.0))
+                                .corner_radius(egui::CornerRadius::same(8))
+                                .inner_margin(egui::Margin::symmetric(12, 10))
                                 .show(ui, |ui| {
                                     for line in &app.setup.log {
                                         ui.label(

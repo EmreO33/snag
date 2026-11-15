@@ -1,5 +1,5 @@
 use eframe::egui;
-use egui::{Key, Rounding, Vec2};
+use egui::{CornerRadius, Key, Vec2};
 
 use crate::app::{PlaylistChoice, SnagApp, View};
 use crate::jobs::JobState;
@@ -58,11 +58,11 @@ fn page(app: &mut SnagApp, ui: &mut egui::Ui) {
 
                 // --- the link field ---------------------------------------
                 let mut submit = false;
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(p.well)
-                    .rounding(Rounding::same(12.0))
+                    .corner_radius(CornerRadius::same(12))
                     .stroke(egui::Stroke::new(1.0_f32, p.line))
-                    .inner_margin(egui::Margin::symmetric(6.0, 4.0))
+                    .inner_margin(egui::Margin::symmetric(6, 4))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.add_space(6.0);
@@ -73,9 +73,10 @@ fn page(app: &mut SnagApp, ui: &mut egui::Ui) {
                                 )
                                 .text_color(p.text)
                                 .font(egui::FontId::new(15.0, egui::FontFamily::Monospace))
-                                .frame(false)
-                                .desired_width(ui.available_width() - 8.0)
-                                .margin(egui::Margin::symmetric(6.0, 10.0));
+                                // The padding lives in the frame: since egui 0.37 a
+                                // text edit given its own frame ignores .margin().
+                                .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(6, 10)))
+                                .desired_width(ui.available_width() - 8.0);
                             let r = ui.add(edit);
                             // The one box that matters most, and egui gives a
                             // text edit no name of its own, so a screen reader
@@ -83,7 +84,7 @@ fn page(app: &mut SnagApp, ui: &mut egui::Ui) {
                             let typed = app.url_input.clone();
                             r.widget_info(|| {
                                 let mut info = egui::WidgetInfo::labeled(
-                                    egui::WidgetType::TextEdit,
+                                    egui::Role::TextInput,
                                     true,
                                     "link",
                                 );
@@ -301,7 +302,7 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
     // flicking from one video's details to another's.
     let arrived = motion::on_off(
         ui.ctx(),
-        egui::Id::new(("preview", probe.url.as_str())),
+        egui::Id::unique(("preview", probe.url.as_str())),
         true,
         motion::ENTER,
     );
@@ -328,7 +329,7 @@ fn preview(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
                     // network, so it gets a fade of its own.
                     let shown = motion::on_off(
                         ui.ctx(),
-                        egui::Id::new(("thumb", texture.id())),
+                        egui::Id::unique(("thumb", texture.id())),
                         true,
                         motion::ENTER,
                     );
@@ -630,10 +631,10 @@ fn playlist_picker(
 
     // Tall enough for a handful, scrolling for a hundred, and never so tall
     // that the download button leaves the screen.
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(p.well)
-        .rounding(egui::Rounding::same(10.0))
-        .inner_margin(egui::Margin::symmetric(6.0, 4.0))
+        .corner_radius(egui::CornerRadius::same(10))
+        .inner_margin(egui::Margin::symmetric(6, 4))
         .show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .max_height(260.0)
@@ -672,11 +673,11 @@ fn offered_link(app: &mut SnagApp, ui: &mut egui::Ui, p: &theme::Palette) {
     };
     let ctx = ui.ctx().clone();
 
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(p.card)
-        .rounding(Rounding::same(12.0))
+        .corner_radius(CornerRadius::same(12))
         .stroke(egui::Stroke::new(1.0_f32, p.accent))
-        .inner_margin(egui::Margin::symmetric(14.0, 10.0))
+        .inner_margin(egui::Margin::symmetric(14, 10))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {

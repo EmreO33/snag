@@ -171,13 +171,13 @@ fn presets(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
                         .desired_width(160.0)
                         .font(egui::FontId::new(14.0, egui::FontFamily::Monospace))
                         .text_color(p.text)
-                        .frame(false);
+                        .frame(egui::Frame::NONE);
                     let response = ui.add(edit);
                     // A hand painted field with no label of its own says
                     // nothing to a screen reader without this.
                     let spoken = format!("preset name, {}", app.settings.presets[i].name);
                     response.widget_info(|| {
-                        egui::WidgetInfo::text_edit(true, spoken.clone(), spoken.clone())
+                        egui::WidgetInfo::text_edit(true, spoken.clone(), spoken.clone(), "")
                     });
                     if response.changed() {
                         changed = true;
@@ -654,10 +654,10 @@ fn processing(app: &mut SnagApp, ui: &mut egui::Ui) -> bool {
         // it happens rather than guessed at here.
         let built_with = &app.setup.ffmpeg_encoders;
         let mut chosen = app.settings.processing.video_encoder;
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(p.card)
-            .rounding(egui::Rounding::same(12.0))
-            .inner_margin(egui::Margin::same(4.0))
+            .corner_radius(egui::CornerRadius::same(12))
+            .inner_margin(egui::Margin::same(4))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::Vec2::new(4.0, 4.0);
                 ui.horizontal_wrapped(|ui| {

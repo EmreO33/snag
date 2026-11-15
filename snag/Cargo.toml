@@ -11,8 +11,10 @@ repository = "https://github.com/EmreO33/snag"
 # accesskit is what puts snag on the screen reader's map. It comes with
 # eframe by default and was lost when default features were turned off to
 # keep the binary small, which is a poor trade against being unusable.
-eframe = { version = "0.29", default-features = false, features = ["accesskit", "glow", "default_fonts"] }
-egui = { version = "0.29", default-features = false }
+# Since 0.37 the clipboard (copy and paste in text boxes), links and the
+# Linux display servers are features of their own rather than always on.
+eframe = { version = "0.37", default-features = false, features = ["accesskit", "glow", "default_fonts", "clipboard", "links", "x11", "wayland"] }
+egui = { version = "0.37", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 directories = "5"

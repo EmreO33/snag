@@ -1936,7 +1936,8 @@ impl SnagApp {
             i.raw
                 .dropped_files
                 .iter()
-                .filter_map(|f| f.path.clone())
+                .map(|f| f.path().to_path_buf())
+                .filter(|p| p.is_absolute())
                 .collect()
         });
         if let Some(path) = dropped.into_iter().next() {
@@ -1949,7 +1950,10 @@ impl SnagApp {
 }
 
 impl eframe::App for SnagApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    /// Everything that is not drawing. eframe runs this before every frame,
+    /// and also on its own while the window is hidden, which is what keeps
+    /// downloads moving and the tray answering when Snag is out of sight.
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.sync_theme(ctx);
         self.drain_job_events();
         self.drain_remux_events();
@@ -1995,11 +1999,14 @@ impl eframe::App for SnagApp {
         if self.active_job_count() > 0 || self.remux.state == RemuxState::Running {
             ctx.request_repaint_after(std::time::Duration::from_millis(200));
         }
+    }
 
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         // The setup screen owns the whole window: no nav, no status bar.
         if self.view != View::Setup {
-            ui::sidebar(self, ctx);
-            ui::status_bar(self, ctx);
+            ui::sidebar(self, ui);
+            ui::status_bar(self, ui);
         }
 
         // A screen that has just been switched to fades up and settles the
@@ -2016,11 +2023,14 @@ impl eframe::App for SnagApp {
 
         egui::CentralPanel::default()
             .frame(
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(self.palette.bg)
-                    .inner_margin(egui::Margin::symmetric(28.0, 22.0 + (1.0 - arrived) * 6.0)),
+                    .inner_margin(egui::Margin::symmetric(
+                        28,
+                        (22.0 + (1.0 - arrived) * 6.0).round() as i8,
+                    )),
             )
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.set_opacity(arrived);
                 match self.view {
                     View::Setup => ui::setup::view(self, ui),
