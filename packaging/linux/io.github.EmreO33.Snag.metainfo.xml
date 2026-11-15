@@ -96,7 +96,7 @@
   </keywords>
 
   <releases>
-    <release version="1.5.13" date="2026-11-14">
+    <release version="1.6.0" date="2026-11-15">
       <description>
         <p>Faster and safer: downloaded tools are checked against their
           published checksums, the proxy setting covers all of Snag's own

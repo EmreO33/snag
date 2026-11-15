@@ -8,9 +8,18 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
-## 1.5.13
+## 1.6.0
 
-Fixes from a review of the whole codebase.
+Faster, safer and up to date underneath: fixes from a review of the whole
+codebase, and the interface toolkit moved up eight versions.
+
+- **Built on egui and eframe 0.37**, from 0.29. Snag looks and works the
+  same, but its background work (downloads, the queue, the tray) now runs
+  even while the window is hidden, by design rather than by workaround, and
+  the last security advisory in its dependencies went with the old version.
+- **The interface scale follows your display's scaling again** on every
+  change. Snag set it in a way that divided by the display's scaling, which
+  only came out right while that was not known yet.
 
 - **Link previews and downloads start about 3 seconds sooner on Windows.**
   Snag now installs yt-dlp's unpacked Windows build. The single-file
