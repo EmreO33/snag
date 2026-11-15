@@ -626,6 +626,19 @@
     {
         "type": "archive",
         "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/byteorder/byteorder-1.5.0.crate",
+        "sha256": "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b",
+        "dest": "cargo/vendor/byteorder-1.5.0"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b\", \"files\": {}}",
+        "dest": "cargo/vendor/byteorder-1.5.0",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
         "url": "https://static.crates.io/crates/byteorder-lite/byteorder-lite-0.1.0.crate",
         "sha256": "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495",
         "dest": "cargo/vendor/byteorder-lite-0.1.0"
@@ -4170,6 +4183,19 @@
         "type": "inline",
         "contents": "{\"package\": \"c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4\", \"files\": {}}",
         "dest": "cargo/vendor/socket2-0.6.5",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/socks/socks-0.3.4.crate",
+        "sha256": "f0c3dbbd9ae980613c6dd8e28a9407b50509d3803b57624d5dfe8315218cd58b",
+        "dest": "cargo/vendor/socks-0.3.4"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"f0c3dbbd9ae980613c6dd8e28a9407b50509d3803b57624d5dfe8315218cd58b\", \"files\": {}}",
+        "dest": "cargo/vendor/socks-0.3.4",
         "dest-filename": ".cargo-checksum.json"
     },
     {
