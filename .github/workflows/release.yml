@@ -155,6 +155,35 @@ jobs:
             dist/snag-linux-x86_64
           if-no-files-found: error
 
+  # The .rpm, installed for real on the two systems it is offered for, the
+  # way the deb is above: building it on Ubuntu proves nothing about Fedora.
+  # Also checks Snag knows it came from an rpm, which is how it updates.
+  rpm:
+    needs: linux
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["fedora:latest", "opensuse/tumbleweed:latest"]
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: dist
+
+      - name: the rpm installs and runs
+        run: |
+          set -eux
+          rpm=$(ls dist/snag-*.rpm)
+          if command -v dnf >/dev/null; then
+            dnf install -y "$rpm"
+          else
+            zypper --non-interactive install --allow-unsigned-rpm "$rpm"
+          fi
+          snag --version
+          snag --version | grep -q "installed from the .rpm package"
+
   # The Flatpak, built from the manifest Flathub builds from, so a change
   # that breaks it is found here rather than in Flathub's build queue. The
   # bundle it makes goes on the release page too, for anyone without Flathub.
@@ -225,7 +254,7 @@ jobs:
           release: stable
 
   publish:
-    needs: [windows, macos, linux, flatpak, snap]
+    needs: [windows, macos, linux, rpm, flatpak, snap]
     if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     permissions:
