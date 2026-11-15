@@ -371,3 +371,13 @@ jobs:
           installers-regex: 'windows-setup\.exe$'
           release-tag: ${{ inputs.tag || github.ref_name }}
           token: ${{ secrets.WINGET_TOKEN }}
+
+  # The Chocolatey package: built, installed and uninstalled on a clean
+  # runner, then pushed once the CHOCOLATEY_API_KEY secret exists.
+  chocolatey:
+    needs: publish
+    uses: ./.github/workflows/chocolatey.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+    secrets:
+      CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}

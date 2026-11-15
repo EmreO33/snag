@@ -1,0 +1,83 @@
+name: chocolatey
+
+# Build Snag's Chocolatey package for a published release, install it, start
+# it and uninstall it on a clean Windows runner, and push it to the community
+# repository when the CHOCOLATEY_API_KEY secret exists. The release workflow
+# runs this for every release; it can also be run by hand for any tag.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+    secrets:
+      CHOCOLATEY_API_KEY:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag to package, e.g. v1.6.0"
+        required: true
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: fill in the version and checksum
+        id: fill
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag }}"
+          $version = $tag.TrimStart('v')
+          $asset = "Snag-$version-windows-setup.exe"
+          $sums = (Invoke-WebRequest "https://github.com/EmreO33/snag/releases/download/$tag/SHA256SUMS.txt").Content
+          if ($sums -is [byte[]]) { $sums = [System.Text.Encoding]::UTF8.GetString($sums) }
+          $line = ($sums -split "`n") | Where-Object { $_.Trim().EndsWith($asset) } | Select-Object -First 1
+          $hash = ($line.Trim() -split '\s+')[0]
+          if ($hash -notmatch '^[0-9a-fA-F]{64}$') { throw "no checksum for $asset" }
+          $script = 'packaging/chocolatey/tools/chocolateyinstall.ps1'
+          (Get-Content $script -Raw).Replace('__VERSION__', $version).Replace('__CHECKSUM__', $hash) |
+            Set-Content $script -NoNewline
+          Get-Content $script
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: pack
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          choco pack packaging/chocolatey/snag.nuspec --version ${{ steps.fill.outputs.version }} --outputdirectory dist
+          if ($LASTEXITCODE -ne 0) { throw "pack failed" }
+
+      # Pushing a package that does not install is how a moderator finds out.
+      # Find out here instead: install it from the file just made, run it,
+      # and take it off again.
+      - name: install, run and uninstall it
+        shell: pwsh
+        run: |
+          choco install snag --source "$PWD\dist" -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "install failed" }
+          $out = & "C:\Program Files\Snag\snag.exe" --version | Out-String
+          $out
+          if ($out -notmatch "installed with the windows installer") { throw "unexpected: $out" }
+          choco uninstall snag -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "uninstall failed" }
+          if (Test-Path "C:\Program Files\Snag\snag.exe") { throw "still installed after uninstall" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chocolatey
+          path: dist/*.nupkg
+
+      - name: push to the community repository
+        shell: pwsh
+        env:
+          KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          if (-not $env:KEY) {
+            "no CHOCOLATEY_API_KEY secret, so the package is built and tested but not pushed"
+            exit 0
+          }
+          choco push "dist/snag.${{ steps.fill.outputs.version }}.nupkg" --source https://push.chocolatey.org/ --api-key $env:KEY
+          if ($LASTEXITCODE -ne 0) { throw "push failed" }

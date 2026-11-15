@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Chocolatey package. The chocolatey workflow fills in the version,
+     packs it, installs and uninstalls it on a Windows runner, and only then
+     pushes it to the community repository. -->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>snag</id>
+    <version>0.0.0</version>
+    <packageSourceUrl>https://github.com/EmreO33/snag/tree/main/packaging/chocolatey</packageSourceUrl>
+    <owners>EmreO33</owners>
+    <title>Snag</title>
+    <authors>EmreO33</authors>
+    <projectUrl>https://github.com/EmreO33/snag</projectUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/EmreO33/snag@main/assets/icon.png</iconUrl>
+    <licenseUrl>https://github.com/EmreO33/snag/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/EmreO33/snag</projectSourceUrl>
+    <docsUrl>https://github.com/EmreO33/snag#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/EmreO33/snag/issues</bugTrackerUrl>
+    <tags>snag video audio downloader yt-dlp youtube ffmpeg foss</tags>
+    <summary>A small, fast desktop video and audio downloader built on yt-dlp.</summary>
+    <description><![CDATA[Snag is a native desktop front end for yt-dlp, written in Rust with no browser inside. Paste a link, pick what you want, and it downloads: from YouTube and more than a thousand other sites.
+
+- Video with sound, audio only, or video without sound
+- Pick the quality and the file type for each download
+- Pick items out of a playlist, or take all of them
+- A queue that survives a restart, and a searchable history
+- Clip a section of a video, split by chapters, save subtitles
+- Remux, extract audio, mute, or turn a file into a GIF
+- Lives in the tray if you want it to, and can start at login
+
+Snag fetches yt-dlp for you on first run and keeps it up to date, and finds or installs ffmpeg.
+
+Privacy policy: https://github.com/EmreO33/snag/blob/main/PRIVACY.md
+]]></description>
+    <releaseNotes>https://github.com/EmreO33/snag/blob/main/CHANGELOG.md</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
