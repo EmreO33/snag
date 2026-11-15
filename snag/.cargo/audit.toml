@@ -1,13 +1,7 @@
 # Advisories `cargo audit` is told to pass over, each with why it cannot
 # reach Snag. Anything not listed here fails CI.
+#
+# Empty for now. The quick-xml advisories (RUSTSEC-2026-0194 and 0195) that
+# used to be listed went away with the move to eframe 0.37.
 [advisories]
-ignore = [
-    # quick-xml 0.30: quadratic time on duplicate attributes, and unbounded
-    # namespace declarations. It comes in on Linux only, through eframe's
-    # screen reader support (accesskit -> atspi -> zbus-lockstep -> zbus_xml),
-    # where it parses D-Bus interface descriptions built into the program,
-    # never anything downloaded or received. Goes away with an eframe
-    # upgrade.
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
-]
+ignore = []
