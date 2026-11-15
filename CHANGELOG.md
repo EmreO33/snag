@@ -8,7 +8,7 @@ A heading may also carry a name after the version, and that name becomes the
 release title on GitHub. Those belong on feature releases, the x.y.0 ones, and
 never on a patch. They are optional even then.
 
-## 1.6.0
+## 1.6.0 - Strengthening the Walls
 
 Faster, safer and up to date underneath: fixes from a review of the whole
 codebase, and the interface toolkit moved up eight versions.
