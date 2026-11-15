@@ -102,6 +102,7 @@ fn install_ytdlp_and_exit() -> bool {
         .unwrap_or_else(bootstrap::managed_bin_dir);
 
     net::set_proxy(&settings::Settings::load().0.network.proxy);
+    installer::ELEVATION_ALLOWED.store(false, std::sync::atomic::Ordering::Relaxed);
     println!("installing into {}", dir.display());
     let (tx, rx) = std::sync::mpsc::channel();
     installer::install(dir, tx, || {});
@@ -125,7 +126,9 @@ fn install_ytdlp_and_exit() -> bool {
                 }
                 installer::InstallState::Failed(e) => {
                     eprintln!("failed: {e}");
-                    break;
+                    // Non-zero, so a copy of Snag that ran this with
+                    // administrator permission can tell it did not work.
+                    std::process::exit(1);
                 }
                 _ => {}
             },

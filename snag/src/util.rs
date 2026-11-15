@@ -17,6 +17,92 @@ pub fn command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
     c
 }
 
+/// Run `exe` with administrator permission, which Windows asks the user for,
+/// wait for it, and return its exit code. Errors when the user says no.
+#[cfg(windows)]
+pub fn run_elevated(exe: &Path, args: &str) -> Result<u32, String> {
+    use std::os::windows::ffi::OsStrExt;
+    #[repr(C)]
+    struct ShellExecuteInfo {
+        size: u32,
+        mask: u32,
+        hwnd: isize,
+        verb: *const u16,
+        file: *const u16,
+        parameters: *const u16,
+        directory: *const u16,
+        show: i32,
+        instance: isize,
+        id_list: *mut std::ffi::c_void,
+        class: *const u16,
+        class_key: isize,
+        hot_key: u32,
+        icon_or_monitor: isize,
+        process: isize,
+    }
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteExW(info: *mut ShellExecuteInfo) -> i32;
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn WaitForSingleObject(handle: isize, millis: u32) -> u32;
+        fn GetExitCodeProcess(handle: isize, code: *mut u32) -> i32;
+        fn CloseHandle(handle: isize) -> i32;
+        fn GetLastError() -> u32;
+    }
+    const SEE_MASK_NOCLOSEPROCESS: u32 = 0x40;
+    const SEE_MASK_NOASYNC: u32 = 0x100;
+    const SW_HIDE: i32 = 0;
+    const INFINITE: u32 = u32::MAX;
+    const ERROR_CANCELLED: u32 = 1223;
+
+    let wide = |s: &std::ffi::OsStr| {
+        s.encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<u16>>()
+    };
+    let verb = wide("runas".as_ref());
+    let file = wide(exe.as_os_str());
+    let parameters = wide(args.as_ref());
+    let mut info = ShellExecuteInfo {
+        size: std::mem::size_of::<ShellExecuteInfo>() as u32,
+        mask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
+        hwnd: 0,
+        verb: verb.as_ptr(),
+        file: file.as_ptr(),
+        parameters: parameters.as_ptr(),
+        directory: std::ptr::null(),
+        show: SW_HIDE,
+        instance: 0,
+        id_list: std::ptr::null_mut(),
+        class: std::ptr::null(),
+        class_key: 0,
+        hot_key: 0,
+        icon_or_monitor: 0,
+        process: 0,
+    };
+    // SAFETY: every pointer in `info` outlives the call, and the process
+    // handle it returns is closed below.
+    unsafe {
+        if ShellExecuteExW(&mut info) == 0 {
+            return Err(if GetLastError() == ERROR_CANCELLED {
+                "administrator permission was declined, so yt-dlp could not be installed there. allow it, or choose a folder you can write to.".to_string()
+            } else {
+                "windows would not run the install with administrator permission".to_string()
+            });
+        }
+        if info.process == 0 {
+            return Err("windows started the install but gave no way to wait for it".to_string());
+        }
+        WaitForSingleObject(info.process, INFINITE);
+        let mut code = 1u32;
+        GetExitCodeProcess(info.process, &mut code);
+        CloseHandle(info.process);
+        Ok(code)
+    }
+}
+
 /// Make `cmd` the head of a process group of its own on Linux and macOS, so
 /// `kill_tree` can reach what it starts. Does nothing on Windows, where
 /// `kill_tree` follows the parent links instead.

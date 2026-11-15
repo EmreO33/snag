@@ -315,6 +315,21 @@ pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send
 /// Download yt-dlp into `dir`, check it runs, and put deno beside it, on the
 /// calling thread. The answer arrives as the final `InstallEvent::State`.
 pub fn install_now(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
+    // A folder this user may not write to (a portable copy in Program Files,
+    // a settings folder chosen somewhere protected) is installed into with
+    // administrator permission, asked for once for the whole install.
+    if !writable(dir) {
+        if ELEVATION_ALLOWED.load(std::sync::atomic::Ordering::Relaxed) {
+            install_elevated(dir, tx, repaint);
+        } else {
+            let _ = tx.send(InstallEvent::State(InstallState::Failed(format!(
+                "cannot write to {}. run this as administrator, or choose another folder.",
+                dir.display()
+            ))));
+            repaint();
+        }
+        return;
+    }
     {
         let dest = dir.join(local_name());
         let _ = tx.send(InstallEvent::Log(format!("source:      {}", source_url())));
@@ -394,6 +409,87 @@ pub fn install_now(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
         }
         repaint();
     }
+}
+
+/// Whether an install into a protected folder may ask for administrator
+/// permission. The window may; `--install-ytdlp` may not, since it is what the
+/// window runs with that permission, and asking again from there would only
+/// ask again.
+pub static ELEVATION_ALLOWED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
+
+/// Whether this process can put files in `dir`, creating it if need be.
+/// Asked by trying, since permissions on Windows are too tangled to read.
+pub fn writable(dir: &Path) -> bool {
+    if std::fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    let probe = dir.join(format!(".snag-write-test-{}", std::process::id()));
+    let ok = std::fs::write(&probe, b"").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    ok
+}
+
+/// Install into a folder that needs administrator permission: Snag runs
+/// itself as `--install-ytdlp <dir>` with that permission, which Windows asks
+/// the user for once, and waits for it. Nowhere else does a desktop app get to
+/// ask, so elsewhere it says what is wrong instead.
+fn install_elevated(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
+    let fail = |e: String| {
+        let _ = tx.send(InstallEvent::State(InstallState::Failed(e)));
+        repaint();
+    };
+    let _ = tx.send(InstallEvent::Log(format!(
+        "destination: {} (needs administrator permission, so windows asks once)",
+        dir.display()
+    )));
+    let _ = tx.send(InstallEvent::State(InstallState::Downloading {
+        got: 0,
+        total: 0,
+    }));
+    repaint();
+
+    #[cfg(windows)]
+    {
+        let exe = match std::env::current_exe() {
+            Ok(exe) => exe,
+            Err(e) => {
+                return fail(format!(
+                    "cannot find snag itself to ask for permission: {e}"
+                ))
+            }
+        };
+        let args = format!("--install-ytdlp \"{}\"", dir.display());
+        match util::run_elevated(&exe, &args) {
+            Ok(0) => {}
+            Ok(code) => {
+                return fail(format!(
+                    "the install with administrator permission failed (exit code {code}). try again, or choose a folder you can write to."
+                ))
+            }
+            Err(e) => return fail(e),
+        }
+        let _ = tx.send(InstallEvent::State(InstallState::Verifying));
+        repaint();
+        let dest = dir.join(local_name());
+        match util::run_capture(&dest.display().to_string(), &["--version"]) {
+            Ok(version) => {
+                let version = version.trim().to_string();
+                let _ = tx.send(InstallEvent::Log(format!("verified:    yt-dlp {version}")));
+                let _ = tx.send(InstallEvent::State(InstallState::Done {
+                    path: dest,
+                    version,
+                }));
+                repaint();
+            }
+            Err(e) => fail(format!("installed, but it would not run: {e}")),
+        }
+    }
+    #[cfg(not(windows))]
+    fail(format!(
+        "snag cannot write to {}. choose a folder you own in setup, or fix its permissions.",
+        dir.display()
+    ));
 }
 
 /// Look for a usable yt-dlp: the configured path first, then PATH, then any
