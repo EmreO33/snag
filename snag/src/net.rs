@@ -63,7 +63,14 @@ pub fn through<T>(proxy: &str, f: impl FnOnce() -> T) -> T {
 /// needs a JavaScript engine.
 pub fn system_proxies() -> Vec<String> {
     let mut found: Vec<String> = Vec::new();
-    for var in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy"] {
+    for var in [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+    ] {
         if let Ok(v) = std::env::var(var) {
             push_proxy(&mut found, &v);
         }
@@ -255,7 +262,10 @@ mod tests {
 
     #[test]
     fn windows_proxy_server_values() {
-        assert_eq!(parse_proxy_server("proxy.corp:8080"), ["http://proxy.corp:8080"]);
+        assert_eq!(
+            parse_proxy_server("proxy.corp:8080"),
+            ["http://proxy.corp:8080"]
+        );
         assert_eq!(
             parse_proxy_server("http=a:80;https=b:443;socks=c:1080"),
             ["http://b:443", "http://a:80", "socks5://c:1080"]

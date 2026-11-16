@@ -147,7 +147,9 @@ fn install_managed(tx: &Sender<UpdateEvent>) {
     crate::installer::install_now(
         &crate::bootstrap::managed_bin_dir(),
         &crate::installer::Source::Github,
-        &itx, &|| {});
+        &itx,
+        &|| {},
+    );
     let mut outcome = Err("the install ended without saying how".to_string());
     for ev in irx.try_iter() {
         match ev {

@@ -376,8 +376,14 @@ fn unreachable_message() -> String {
 fn from_github(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) -> Result<(), String> {
     let dest = dir.join(local_name());
     let _ = tx.send(InstallEvent::Log(format!("source:      {}", source_url())));
-    let _ = tx.send(InstallEvent::Log(format!("destination: {}", dest.display())));
-    let _ = tx.send(InstallEvent::State(InstallState::Downloading { got: 0, total: 0 }));
+    let _ = tx.send(InstallEvent::Log(format!(
+        "destination: {}",
+        dest.display()
+    )));
+    let _ = tx.send(InstallEvent::State(InstallState::Downloading {
+        got: 0,
+        total: 0,
+    }));
     repaint();
 
     // The checksum list is the first thing fetched, so it is also what finds
@@ -403,7 +409,8 @@ fn from_github(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) -> Res
                             break;
                         }
                         Err(e) => {
-                            let _ = tx.send(InstallEvent::Log(format!("proxy:       {proxy}: {e}")));
+                            let _ =
+                                tx.send(InstallEvent::Log(format!("proxy:       {proxy}: {e}")));
                         }
                     }
                 }
@@ -441,8 +448,14 @@ fn from_file(
     repaint: &dyn Fn(),
 ) -> Result<(), String> {
     let dest = dir.join(local_name());
-    let _ = tx.send(InstallEvent::Log(format!("source:      {} (picked by you)", file.display())));
-    let _ = tx.send(InstallEvent::Log(format!("destination: {}", dest.display())));
+    let _ = tx.send(InstallEvent::Log(format!(
+        "source:      {} (picked by you)",
+        file.display()
+    )));
+    let _ = tx.send(InstallEvent::Log(format!(
+        "destination: {}",
+        dest.display()
+    )));
     let _ = tx.send(InstallEvent::State(InstallState::Verifying));
     repaint();
 
@@ -460,8 +473,13 @@ fn from_file(
     } else {
         // Tried out under a name of its own beside the real one, then renamed
         // over it, so a file that turns out not to be yt-dlp replaces nothing.
-        let trial = dir.join(if cfg!(windows) { "yt-dlp-check.exe" } else { "yt-dlp-check" });
-        std::fs::copy(file, &trial).map_err(|e| format!("could not copy {}: {e}", file.display()))?;
+        let trial = dir.join(if cfg!(windows) {
+            "yt-dlp-check.exe"
+        } else {
+            "yt-dlp-check"
+        });
+        std::fs::copy(file, &trial)
+            .map_err(|e| format!("could not copy {}: {e}", file.display()))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -486,21 +504,22 @@ fn from_file(
 /// The version an executable reports, provided it reports one the way yt-dlp
 /// does (a date, 2026.10.26), so that a wrong file is caught before use.
 fn ytdlp_version_of(exe: &Path) -> Result<String, String> {
-    let out = util::run_capture(&exe.display().to_string(), &["--version"])
-        .map_err(|e| {
-            let short: String = e.trim().chars().take(120).collect();
-            if short.is_empty() {
-                "that file is not yt-dlp, or it would not run".to_string()
-            } else {
-                format!("that file is not yt-dlp, or it would not run ({short})")
-            }
-        })?;
+    let out = util::run_capture(&exe.display().to_string(), &["--version"]).map_err(|e| {
+        let short: String = e.trim().chars().take(120).collect();
+        if short.is_empty() {
+            "that file is not yt-dlp, or it would not run".to_string()
+        } else {
+            format!("that file is not yt-dlp, or it would not run ({short})")
+        }
+    })?;
     let version = out.trim().to_string();
     if looks_like_ytdlp_version(&version) {
         Ok(version)
     } else {
         let short: String = version.chars().take(60).collect();
-        Err(format!("that file is not yt-dlp (it says its version is \"{short}\")"))
+        Err(format!(
+            "that file is not yt-dlp (it says its version is \"{short}\")"
+        ))
     }
 }
 
@@ -509,7 +528,9 @@ fn looks_like_ytdlp_version(v: &str) -> bool {
     let parts: Vec<&str> = first.split('.').collect();
     parts.len() >= 3
         && parts[0].len() == 4
-        && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
 }
 
 /// The last steps of every install: yt-dlp runs and says its version, and
@@ -554,7 +575,10 @@ fn finish(
             )));
         }
     }
-    let _ = tx.send(InstallEvent::State(InstallState::Done { path: dest, version }));
+    let _ = tx.send(InstallEvent::State(InstallState::Done {
+        path: dest,
+        version,
+    }));
     Ok(())
 }
 
@@ -1145,7 +1169,11 @@ mod tests {
             "{last:?}"
         );
         assert_eq!(std::fs::read(&existing).unwrap(), b"the old one");
-        let left: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name()).collect();
+        let left: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name())
+            .collect();
         assert_eq!(left.len(), 1, "{left:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
