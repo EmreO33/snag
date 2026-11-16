@@ -94,6 +94,7 @@ fn push_proxy(found: &mut Vec<String>, p: &str) {
 /// Windows' `ProxyServer` value: either one `host:port` for everything, or
 /// `scheme=host:port` pairs split by semicolons. https first, since every
 /// request Snag makes is https; then http; then socks.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn parse_proxy_server(value: &str) -> Vec<String> {
     let value = value.trim();
     if value.is_empty() {
@@ -119,6 +120,7 @@ fn parse_proxy_server(value: &str) -> Vec<String> {
     out
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn with_scheme(addr: &str, scheme: &str) -> String {
     if addr.contains("://") {
         addr.to_string()
