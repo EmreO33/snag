@@ -295,7 +295,9 @@ fn main() -> eframe::Result<()> {
         window::park_in_tray();
     }
 
+    let renderer = chosen_renderer();
     let options = eframe::NativeOptions {
+        renderer,
         event_loop_builder,
         viewport: egui::ViewportBuilder::default()
             .with_title("Snag")
@@ -308,7 +310,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
 
-    eframe::run_native(
+    let result = eframe::run_native(
         "Snag",
         options,
         Box::new(move |cc| {
@@ -330,5 +332,78 @@ fn main() -> eframe::Result<()> {
             }
             Ok(Box::new(app))
         }),
+    );
+
+    if let Err(e) = &result {
+        // A window loop cannot be built twice in one process, so the second
+        // attempt is a second process.
+        #[cfg(windows)]
+        if renderer == eframe::Renderer::Glow && opengl_failed(e) && start_with_d3d12() {
+            return Ok(());
+        }
+        startup_failed(e);
+    }
+    result
+}
+
+/// What the copy of Snag started after OpenGL failed is told to draw with.
+#[cfg(windows)]
+const RENDERER_ENV: &str = "SNAG_RENDERER";
+#[cfg(windows)]
+const D3D12: &str = "d3d12";
+
+/// OpenGL, unless this is the copy started because OpenGL would not work.
+/// OpenGL first because it starts faster and is what Snag has always used.
+fn chosen_renderer() -> eframe::Renderer {
+    #[cfg(windows)]
+    if std::env::var_os(RENDERER_ENV).is_some_and(|v| v == D3D12) {
+        return eframe::Renderer::Wgpu;
+    }
+    eframe::Renderer::Glow
+}
+
+/// Whether Snag stopped because OpenGL could not start, rather than for any
+/// reason a second try would not fix.
+#[cfg(windows)]
+fn opengl_failed(e: &eframe::Error) -> bool {
+    matches!(
+        e,
+        eframe::Error::Glutin(_) | eframe::Error::NoGlutinConfigs(..) | eframe::Error::OpenGL(_)
     )
+}
+
+/// Start Snag again, with the same arguments, drawing with Direct3D 12.
+#[cfg(windows)]
+fn start_with_d3d12() -> bool {
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    std::process::Command::new(exe)
+        .args(std::env::args_os().skip(1))
+        .env(RENDERER_ENV, D3D12)
+        .spawn()
+        .is_ok()
+}
+
+/// Snag could not open its window at all. Without a window there is nowhere
+/// to say so, and a release build has no console, so on Windows say it in a
+/// message box: otherwise clicking Snag just seems to do nothing.
+fn startup_failed(e: &eframe::Error) {
+    let text = format!(
+        "Snag could not open its window.\n\n{e}\n\nThis usually means the graphics driver is missing or out of date. Updating it from the PC or graphics card maker's site normally fixes it."
+    );
+    eprintln!("{text}");
+    #[cfg(windows)]
+    {
+        #[link(name = "user32")]
+        extern "system" {
+            fn MessageBoxW(hwnd: isize, text: *const u16, caption: *const u16, kind: u32) -> i32;
+        }
+        const MB_ICONERROR: u32 = 0x10;
+        let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
+        let (text, caption) = (wide(&text), wide("Snag"));
+        unsafe {
+            MessageBoxW(0, text.as_ptr(), caption.as_ptr(), MB_ICONERROR);
+        }
+    }
 }

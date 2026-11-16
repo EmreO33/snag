@@ -40,6 +40,15 @@ notify-rust = "4"
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 tray-icon = "0.19"
 
+# A second way to draw, for Windows machines where OpenGL cannot start:
+# virtual machines, Windows Sandbox, Remote Desktop, missing or broken GPU
+# drivers. Snag draws with OpenGL first and starts again with Direct3D 12
+# when that fails. Direct3D 12 only, which Windows always has (in software,
+# through WARP, when there is no GPU), rather than every backend wgpu knows.
+[target.'cfg(windows)'.dependencies]
+eframe = { version = "0.37", default-features = false, features = ["wgpu_no_default_features"] }
+wgpu = { version = "30", default-features = false, features = ["dx12"] }
+
 # Cancelling a download stops the ffmpeg yt-dlp started, by killing the
 # process group it runs in. Already in the tree through winit.
 [target.'cfg(unix)'.dependencies]
