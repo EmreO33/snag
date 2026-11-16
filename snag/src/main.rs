@@ -87,8 +87,9 @@ fn print_command_and_exit() -> bool {
     true
 }
 
-/// `snag --install-ytdlp [dir]` downloads the current yt-dlp release and exits,
-/// which is the setup screen's install step without the window.
+/// `snag --install-ytdlp [dir] [--from <file>]` downloads the current yt-dlp
+/// release (or installs the file given) and exits, which is the setup
+/// screen's install step without the window.
 fn install_ytdlp_and_exit() -> bool {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(pos) = args.iter().position(|a| a == "--install-ytdlp") else {
@@ -100,12 +101,19 @@ fn install_ytdlp_and_exit() -> bool {
         .filter(|a| !a.starts_with("--"))
         .map(std::path::PathBuf::from)
         .unwrap_or_else(bootstrap::managed_bin_dir);
+    // `--from <file>`: a yt-dlp downloaded by hand rather than from GitHub.
+    let source = args
+        .iter()
+        .position(|a| a == "--from")
+        .and_then(|i| args.get(i + 1))
+        .map(|f| installer::Source::File(std::path::PathBuf::from(f)))
+        .unwrap_or(installer::Source::Github);
 
     net::set_proxy(&settings::Settings::load().0.network.proxy);
     installer::ELEVATION_ALLOWED.store(false, std::sync::atomic::Ordering::Relaxed);
     println!("installing into {}", dir.display());
     let (tx, rx) = std::sync::mpsc::channel();
-    installer::install(dir, tx, || {});
+    installer::install(dir, source, tx, || {});
 
     let mut last_pct = u64::MAX;
     while let Ok(ev) = rx.recv() {

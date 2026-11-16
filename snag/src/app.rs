@@ -119,6 +119,10 @@ pub struct SetupState {
     /// The deno snag installed beside yt-dlp, by version, if it is there.
     pub deno_version: Option<String>,
     pub install: InstallState,
+    /// Set when a yt-dlp install fails, so the next frame scrolls its
+    /// failure into view: the install button sits low enough on the setup
+    /// screen that the reason appeared out of sight beneath it.
+    pub show_install_failure: bool,
     pub ffmpeg_install: InstallState,
     pub log: Vec<String>,
     pub error: Option<String>,
@@ -136,6 +140,7 @@ impl SetupState {
             ffmpeg_encoders: Vec::new(),
             deno_version: None,
             install: InstallState::Idle,
+            show_install_failure: false,
             ffmpeg_install: InstallState::Idle,
             log: Vec::new(),
             error: None,
@@ -1256,6 +1261,16 @@ impl SnagApp {
 
     /// Download yt-dlp from its own GitHub releases into the config directory.
     pub fn start_ytdlp_install(&mut self, ctx: &egui::Context) {
+        self.install_ytdlp(ctx, crate::installer::Source::Github);
+    }
+
+    /// Install a yt-dlp the user downloaded themselves, for when Snag cannot
+    /// reach GitHub but their browser can.
+    pub fn install_ytdlp_from(&mut self, ctx: &egui::Context, file: std::path::PathBuf) {
+        self.install_ytdlp(ctx, crate::installer::Source::File(file));
+    }
+
+    fn install_ytdlp(&mut self, ctx: &egui::Context, source: crate::installer::Source) {
         if self.setup.install.busy() {
             return;
         }
@@ -1271,7 +1286,7 @@ impl SnagApp {
                 let _ = tx.send(SetupEvent::Install(ev));
             }
         });
-        crate::installer::install(dir, itx, repaint);
+        crate::installer::install(dir, source, itx, repaint);
     }
 
     /// Install ffmpeg through the platform's package manager, where that can
@@ -1334,6 +1349,7 @@ impl SnagApp {
                     if let InstallState::Failed(e) = &st {
                         let short: String = e.chars().take(90).collect();
                         self.toast(short, true);
+                        self.setup.show_install_failure = true;
                     }
                     if let InstallState::Done { version, .. } = &st {
                         self.toast(format!("installed yt-dlp {version}"), false);

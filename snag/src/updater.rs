@@ -144,7 +144,10 @@ fn install_managed(tx: &Sender<UpdateEvent>) {
         "this yt-dlp cannot update itself, so snag is installing its own copy".into(),
     ));
     let (itx, irx) = std::sync::mpsc::channel();
-    crate::installer::install_now(&crate::bootstrap::managed_bin_dir(), &itx, &|| {});
+    crate::installer::install_now(
+        &crate::bootstrap::managed_bin_dir(),
+        &crate::installer::Source::Github,
+        &itx, &|| {});
     let mut outcome = Err("the install ended without saying how".to_string());
     for ev in irx.try_iter() {
         match ev {

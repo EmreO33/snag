@@ -242,8 +242,65 @@ pub fn view(app: &mut SnagApp, ui: &mut egui::Ui) {
                                 }
                                 InstallState::Failed(e) => {
                                     ui.add_space(10.0);
-                                    let short: String = e.chars().take(200).collect();
-                                    ui.label(egui::RichText::new(short).size(12.0).color(p.bad));
+                                    let short: String = e.chars().take(400).collect();
+                                    let failure =
+                                        ui.label(egui::RichText::new(short).size(12.0).color(p.bad));
+
+                                    // The way round a network that will not
+                                    // let snag reach github: the browser
+                                    // often can, so the file is fetched there
+                                    // and handed over.
+                                    ui.add_space(10.0);
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "you can also install it by hand: download {} from yt-dlp's release page in your browser, then pick the file here.",
+                                            crate::installer::asset_name()
+                                        ))
+                                        .size(12.0)
+                                        .color(p.dim),
+                                    );
+                                    ui.add_space(8.0);
+                                    let buttons = ui.horizontal(|ui| {
+                                        if theme::action_button(
+                                            ui,
+                                            &p,
+                                            "open the release page",
+                                            false,
+                                            !installing,
+                                        )
+                                        .clicked()
+                                        {
+                                            ctx.open_url(egui::OpenUrl::new_tab(
+                                                crate::installer::RELEASES_PAGE,
+                                            ));
+                                        }
+                                        if theme::action_button(
+                                            ui,
+                                            &p,
+                                            "pick the downloaded file",
+                                            false,
+                                            !installing,
+                                        )
+                                        .clicked()
+                                        {
+                                            let mut dialog = rfd::FileDialog::new()
+                                                .set_title("pick the yt-dlp you downloaded");
+                                            if cfg!(windows) {
+                                                dialog = dialog.add_filter("yt-dlp", &["exe", "zip"]);
+                                            }
+                                            // Where the browser will have put it.
+                                            dialog = dialog.set_directory(util::default_download_dir());
+                                            if let Some(file) = dialog.pick_file() {
+                                                app.install_ytdlp_from(&ctx, file);
+                                            }
+                                        }
+                                    });
+                                    if app.setup.show_install_failure {
+                                        app.setup.show_install_failure = false;
+                                        failure
+                                            .union(buttons.response)
+                                            .scroll_to_me(Some(egui::Align::Center));
+                                    }
                                 }
                                 _ => {}
                             }

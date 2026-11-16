@@ -108,6 +108,7 @@ fn extract_all(zip: &Path, staging: &Path) -> Result<(), String> {
 
 /// Put an unpacked yt-dlp from `zip` into `dir`, replacing whichever build
 /// was there, so that `dir` ends up with the old one or the new one whole.
+/// The unpacked yt-dlp is run as `--version` before it replaces anything.
 fn install_unpacked(zip: &Path, dir: &Path) -> Result<(), String> {
     let staging = dir.join("yt-dlp.new");
     let result = (|| {
@@ -116,6 +117,7 @@ fn install_unpacked(zip: &Path, dir: &Path) -> Result<(), String> {
         if !new_exe.is_file() || !new_internal.is_dir() {
             return Err("the archive is not the yt-dlp build it should be".to_string());
         }
+        ytdlp_version_of(&new_exe)?;
 
         let (exe, internal) = (dir.join(local_name()), dir.join(UNPACKED_DIR));
         let (old_exe, old_internal) = (
@@ -305,22 +307,38 @@ fn download_to(
     Ok(())
 }
 
-/// Download yt-dlp into `dir` in the background and report progress.
-pub fn install(dir: PathBuf, tx: Sender<InstallEvent>, repaint: impl Fn() + Send + 'static) {
+/// Where the yt-dlp being installed comes from.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Source {
+    /// The current release, downloaded from the yt-dlp project on GitHub.
+    Github,
+    /// A copy the user downloaded themselves (in a browser, when Snag cannot
+    /// reach GitHub) and picked: yt-dlp's own binary, or on Windows its
+    /// unpacked build's zip.
+    File(PathBuf),
+}
+
+/// Install yt-dlp into `dir` in the background and report progress.
+pub fn install(
+    dir: PathBuf,
+    source: Source,
+    tx: Sender<InstallEvent>,
+    repaint: impl Fn() + Send + 'static,
+) {
     std::thread::spawn(move || {
-        install_now(&dir, &tx, &repaint);
+        install_now(&dir, &source, &tx, &repaint);
     });
 }
 
-/// Download yt-dlp into `dir`, check it runs, and put deno beside it, on the
+/// Install yt-dlp into `dir`, check it runs, and put deno beside it, on the
 /// calling thread. The answer arrives as the final `InstallEvent::State`.
-pub fn install_now(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
+pub fn install_now(dir: &Path, source: &Source, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
     // A folder this user may not write to (a portable copy in Program Files,
     // a settings folder chosen somewhere protected) is installed into with
     // administrator permission, asked for once for the whole install.
     if !writable(dir) {
         if ELEVATION_ALLOWED.load(std::sync::atomic::Ordering::Relaxed) {
-            install_elevated(dir, tx, repaint);
+            install_elevated(dir, source, tx, repaint);
         } else {
             let _ = tx.send(InstallEvent::State(InstallState::Failed(format!(
                 "cannot write to {}. run this as administrator, or choose another folder.",
@@ -330,85 +348,214 @@ pub fn install_now(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
         }
         return;
     }
-    {
-        let dest = dir.join(local_name());
-        let _ = tx.send(InstallEvent::Log(format!("source:      {}", source_url())));
-        let _ = tx.send(InstallEvent::Log(format!(
-            "destination: {}",
-            dest.display()
-        )));
-        let _ = tx.send(InstallEvent::State(InstallState::Downloading {
-            got: 0,
-            total: 0,
-        }));
-        repaint();
+    let result = match source {
+        Source::Github => from_github(dir, tx, repaint),
+        Source::File(file) => from_file(dir, file, tx, repaint),
+    };
+    if let Err(e) = result {
+        let _ = tx.send(InstallEvent::State(InstallState::Failed(e)));
+    }
+    repaint();
+}
 
-        let expected = published_sha256(
-            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS",
-            source_asset(),
-        );
-        let fetched = expected.and_then(|expected| {
-            if unpacked_asset().is_none() {
-                return download_to(&source_url(), &dest, &expected, tx);
+/// yt-dlp's latest release, for downloading it by hand in a browser.
+pub const RELEASES_PAGE: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest";
+
+const SUMS_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS";
+
+/// What to tell someone whose network does not let Snag reach GitHub. The
+/// technical reason goes in the log beneath it.
+fn unreachable_message() -> String {
+    if crate::net::settings_proxy().is_empty() {
+        "snag could not reach github.com, where yt-dlp is published. a firewall, a network filter or no internet connection is likely in the way. your browser may still get through.".into()
+    } else {
+        "snag could not reach github.com through the proxy in settings > network. check the proxy there.".into()
+    }
+}
+
+fn from_github(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) -> Result<(), String> {
+    let dest = dir.join(local_name());
+    let _ = tx.send(InstallEvent::Log(format!("source:      {}", source_url())));
+    let _ = tx.send(InstallEvent::Log(format!("destination: {}", dest.display())));
+    let _ = tx.send(InstallEvent::State(InstallState::Downloading { got: 0, total: 0 }));
+    repaint();
+
+    // The checksum list is the first thing fetched, so it is also what finds
+    // out whether GitHub can be reached at all. Directly first (or through the
+    // proxy in settings, which is never gone around). When that fails and
+    // settings name no proxy, through each proxy the system is set to use: on
+    // a network that lets nothing out except through its proxy, the browser
+    // works and Snag, knowing nothing of the proxy, did not.
+    let asset = source_asset();
+    let (expected, route) = match published_sha256(SUMS_URL, asset) {
+        Ok(hash) => (hash, None),
+        Err(first) if first.starts_with("could not fetch") => {
+            let _ = tx.send(InstallEvent::Log(format!("direct:      {first}")));
+            let mut reached = None;
+            if crate::net::settings_proxy().is_empty() {
+                for proxy in crate::net::system_proxies() {
+                    match crate::net::through(&proxy, || published_sha256(SUMS_URL, asset)) {
+                        Ok(hash) => {
+                            let _ = tx.send(InstallEvent::Log(format!(
+                                "proxy:       reached github through the system proxy {proxy}"
+                            )));
+                            reached = Some((hash, Some(proxy)));
+                            break;
+                        }
+                        Err(e) => {
+                            let _ = tx.send(InstallEvent::Log(format!("proxy:       {proxy}: {e}")));
+                        }
+                    }
+                }
             }
+            reached.ok_or_else(unreachable_message)?
+        }
+        Err(other) => return Err(other),
+    };
+
+    let rest = || -> Result<(), String> {
+        if unpacked_asset().is_none() {
+            download_to(&source_url(), &dest, &expected, tx)?;
+        } else {
             let zip = dir.join("yt-dlp-download.zip");
             let unpacked = download_to(&source_url(), &zip, &expected, tx)
                 .and_then(|()| install_unpacked(&zip, dir));
             let _ = std::fs::remove_file(&zip);
-            unpacked
-        });
-        if let Err(e) = fetched {
-            let _ = tx.send(InstallEvent::State(InstallState::Failed(e)));
-            repaint();
-            return;
+            unpacked?;
         }
-
-        let _ = tx.send(InstallEvent::State(InstallState::Verifying));
-        repaint();
-
-        // A binary that cannot report its own version is not one we should use.
-        match util::run_capture(&dest.display().to_string(), &["--version"]) {
-            Ok(version) => {
-                let version = version.trim().to_string();
-                let _ = tx.send(InstallEvent::Log(format!("verified:    yt-dlp {version}")));
-
-                // yt-dlp wants a javascript runtime for youtube and has
-                // deprecated working without one, so it comes along with
-                // yt-dlp rather than being a second thing to know about. Not
-                // having it is not yet fatal, so a failure here is logged
-                // and yt-dlp still counts as installed.
-                let _ = tx.send(InstallEvent::State(InstallState::Verifying));
-                match ensure_deno(dir, tx) {
-                    Ok(v) => {
-                        let _ = tx.send(InstallEvent::Log(format!("verified:    deno {v}")));
-                    }
-                    Err(e) => {
-                        let _ = tx.send(InstallEvent::Log(format!(
-                            "deno:        not installed ({e}). youtube still works today, but yt-dlp has deprecated running without it."
-                        )));
-                    }
-                }
-
-                let _ = tx.send(InstallEvent::State(InstallState::Done {
-                    path: dest,
-                    version,
-                }));
-            }
-            Err(e) => {
-                // ENOENT here almost never means the file is missing: it means
-                // the kernel could not exec it. Say something useful.
-                let hint = if cfg!(unix) && e.contains("No such file or directory") {
-                    " (the file is there, but it would not execute. this build should be self-contained, so it may have downloaded incompletely: try again.)"
-                } else {
-                    ""
-                };
-                let _ = tx.send(InstallEvent::State(InstallState::Failed(format!(
-                    "downloaded, but it would not run: {e}{hint}"
-                ))));
-            }
-        }
-        repaint();
+        finish(dir, dest.clone(), tx, repaint)
+    };
+    match route {
+        Some(proxy) => crate::net::through(&proxy, rest),
+        None => rest(),
     }
+}
+
+/// Install a yt-dlp the user downloaded themselves. It cannot be checked
+/// against GitHub's checksum (GitHub being what could not be reached), so it
+/// has to show it is yt-dlp by running as one before it replaces anything.
+fn from_file(
+    dir: &Path,
+    file: &Path,
+    tx: &Sender<InstallEvent>,
+    repaint: &dyn Fn(),
+) -> Result<(), String> {
+    let dest = dir.join(local_name());
+    let _ = tx.send(InstallEvent::Log(format!("source:      {} (picked by you)", file.display())));
+    let _ = tx.send(InstallEvent::Log(format!("destination: {}", dest.display())));
+    let _ = tx.send(InstallEvent::State(InstallState::Verifying));
+    repaint();
+
+    let is_zip = file
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("zip"));
+    if is_zip {
+        if unpacked_asset().is_none() {
+            return Err(format!(
+                "that is a zip. pick {}, yt-dlp's single-file build for this system.",
+                asset_name()
+            ));
+        }
+        install_unpacked(file, dir)?;
+    } else {
+        // Tried out under a name of its own beside the real one, then renamed
+        // over it, so a file that turns out not to be yt-dlp replaces nothing.
+        let trial = dir.join(if cfg!(windows) { "yt-dlp-check.exe" } else { "yt-dlp-check" });
+        std::fs::copy(file, &trial).map_err(|e| format!("could not copy {}: {e}", file.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&trial, std::fs::Permissions::from_mode(0o755));
+        }
+        if let Err(e) = ytdlp_version_of(&trial) {
+            let _ = std::fs::remove_file(&trial);
+            return Err(e);
+        }
+        let _ = std::fs::remove_file(&dest);
+        std::fs::rename(&trial, &dest).map_err(|e| {
+            let _ = std::fs::remove_file(&trial);
+            format!("could not move yt-dlp into place: {e}")
+        })?;
+    }
+    let _ = tx.send(InstallEvent::Log(
+        "checksum:    not checked, since github could not be reached. snag ran it to make sure it is yt-dlp.".into(),
+    ));
+    finish(dir, dest, tx, repaint)
+}
+
+/// The version an executable reports, provided it reports one the way yt-dlp
+/// does (a date, 2026.10.26), so that a wrong file is caught before use.
+fn ytdlp_version_of(exe: &Path) -> Result<String, String> {
+    let out = util::run_capture(&exe.display().to_string(), &["--version"])
+        .map_err(|e| {
+            let short: String = e.trim().chars().take(120).collect();
+            if short.is_empty() {
+                "that file is not yt-dlp, or it would not run".to_string()
+            } else {
+                format!("that file is not yt-dlp, or it would not run ({short})")
+            }
+        })?;
+    let version = out.trim().to_string();
+    if looks_like_ytdlp_version(&version) {
+        Ok(version)
+    } else {
+        let short: String = version.chars().take(60).collect();
+        Err(format!("that file is not yt-dlp (it says its version is \"{short}\")"))
+    }
+}
+
+fn looks_like_ytdlp_version(v: &str) -> bool {
+    let first = v.split_whitespace().next().unwrap_or("");
+    let parts: Vec<&str> = first.split('.').collect();
+    parts.len() >= 3
+        && parts[0].len() == 4
+        && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+}
+
+/// The last steps of every install: yt-dlp runs and says its version, and
+/// deno comes along beside it.
+fn finish(
+    dir: &Path,
+    dest: PathBuf,
+    tx: &Sender<InstallEvent>,
+    repaint: &dyn Fn(),
+) -> Result<(), String> {
+    let _ = tx.send(InstallEvent::State(InstallState::Verifying));
+    repaint();
+
+    // A binary that cannot report its own version is not one we should use.
+    let version = match util::run_capture(&dest.display().to_string(), &["--version"]) {
+        Ok(v) => v.trim().to_string(),
+        Err(e) => {
+            // ENOENT here almost never means the file is missing: it means
+            // the kernel could not exec it. Say something useful.
+            let hint = if cfg!(unix) && e.contains("No such file or directory") {
+                " (the file is there, but it would not execute. this build should be self-contained, so it may have downloaded incompletely: try again.)"
+            } else {
+                ""
+            };
+            return Err(format!("downloaded, but it would not run: {e}{hint}"));
+        }
+    };
+    let _ = tx.send(InstallEvent::Log(format!("verified:    yt-dlp {version}")));
+
+    // yt-dlp wants a javascript runtime for youtube and has deprecated
+    // working without one, so it comes along with yt-dlp rather than being a
+    // second thing to know about. Not having it is not yet fatal, so a
+    // failure here is logged and yt-dlp still counts as installed.
+    let _ = tx.send(InstallEvent::State(InstallState::Verifying));
+    match ensure_deno(dir, tx) {
+        Ok(v) => {
+            let _ = tx.send(InstallEvent::Log(format!("verified:    deno {v}")));
+        }
+        Err(e) => {
+            let _ = tx.send(InstallEvent::Log(format!(
+                "deno:        not installed ({e}). youtube still works today, but yt-dlp has deprecated running without it."
+            )));
+        }
+    }
+    let _ = tx.send(InstallEvent::State(InstallState::Done { path: dest, version }));
+    Ok(())
 }
 
 /// Whether an install into a protected folder may ask for administrator
@@ -434,7 +581,7 @@ pub fn writable(dir: &Path) -> bool {
 /// itself as `--install-ytdlp <dir>` with that permission, which Windows asks
 /// the user for once, and waits for it. Nowhere else does a desktop app get to
 /// ask, so elsewhere it says what is wrong instead.
-fn install_elevated(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
+fn install_elevated(dir: &Path, source: &Source, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
     let fail = |e: String| {
         let _ = tx.send(InstallEvent::State(InstallState::Failed(e)));
         repaint();
@@ -459,7 +606,10 @@ fn install_elevated(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
                 ))
             }
         };
-        let args = format!("--install-ytdlp \"{}\"", dir.display());
+        let mut args = format!("--install-ytdlp \"{}\"", dir.display());
+        if let Source::File(file) = source {
+            args.push_str(&format!(" --from \"{}\"", file.display()));
+        }
         match util::run_elevated(&exe, &args) {
             Ok(0) => {}
             Ok(code) => {
@@ -486,10 +636,13 @@ fn install_elevated(dir: &Path, tx: &Sender<InstallEvent>, repaint: &dyn Fn()) {
         }
     }
     #[cfg(not(windows))]
-    fail(format!(
-        "snag cannot write to {}. choose a folder you own in setup, or fix its permissions.",
-        dir.display()
-    ));
+    {
+        let _ = source;
+        fail(format!(
+            "snag cannot write to {}. choose a folder you own in setup, or fix its permissions.",
+            dir.display()
+        ));
+    }
 }
 
 /// Look for a usable yt-dlp: the configured path first, then PATH, then any
@@ -955,6 +1108,49 @@ mod tests {
     use super::sha256_for;
 
     #[test]
+    fn what_counts_as_a_ytdlp_version() {
+        use super::looks_like_ytdlp_version as v;
+        assert!(v("2026.10.26"));
+        assert!(v("2026.10.26.233012")); // nightly builds
+        assert!(!v("Python 3.13.1"));
+        assert!(!v("deno 2.5.0"));
+        assert!(!v("26.10.26"));
+        assert!(!v(""));
+    }
+
+    /// A file picked by hand that is not yt-dlp is refused, and whatever
+    /// yt-dlp was there before is left as it was.
+    #[test]
+    fn a_wrong_file_replaces_nothing() {
+        let dir = std::env::temp_dir().join(format!("snag-from-file-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let existing = dir.join(super::local_name());
+        std::fs::write(&existing, b"the old one").unwrap();
+
+        // Something that runs, but says it is something else.
+        let picked = std::env::current_exe().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        super::install_now(&dir, &super::Source::File(picked), &tx, &|| {});
+        drop(tx);
+        let last = rx
+            .iter()
+            .filter_map(|e| match e {
+                super::InstallEvent::State(s) => Some(s),
+                _ => None,
+            })
+            .last();
+        assert!(
+            matches!(&last, Some(super::InstallState::Failed(e)) if e.contains("not yt-dlp")),
+            "{last:?}"
+        );
+        assert_eq!(std::fs::read(&existing).unwrap(), b"the old one");
+        let left: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name()).collect();
+        assert_eq!(left.len(), 1, "{left:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn finds_the_published_hash_in_each_checksum_layout() {
         let ytdlp = "e51e69e89489f199530f13d32a4342da3ddb2cf34842f364603a066db05afbf3  yt-dlp\n\
                      f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d  yt-dlp.exe\n";
@@ -1018,7 +1214,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let (tx, rx) = channel();
-        install(dir.clone(), tx, || {});
+        install(dir.clone(), Source::Github, tx, || {});
         let mut done = None;
         let mut log = Vec::new();
         while let Ok(ev) = rx.recv_timeout(std::time::Duration::from_secs(300)) {
